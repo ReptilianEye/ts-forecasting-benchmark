@@ -10,10 +10,13 @@ Witaj w repozytorium zespołu projektowego! Ten dokument zawiera wszystko, co ni
 
 Projekt ma na celu empiryczną weryfikację głośnej tezy z artykułu *DLinear* (Zeng et al., 2022): **czy złożone mechanizmy uwagi w architekturach Transformerowych są rzeczywiście niezbędne w szeregach czasowych**, czy też proste modele liniowe z dekompozycją trendu i sezonowości (DLinear, NLinear) osiągają zbliżoną lub lepszą dokładność przy wielokrotnie niższym koszcie obliczeniowym?
 
-W projekcie porównujemy:
-1. **Modele bez uwagi (Linear Family)**: `Linear`, `DLinear`, `NLinear` oraz bazy naiwne (`Naive`, `SeasonalNaive`).
-2. **Nowoczesne Transformery (Attention Family)**: `PatchTST` (sub-series patching + channel independence), `iTransformer` (odwrócona uwaga między zmiennymi).
-3. **Wczesne Transformery (Baseline Attention)**: `Autoformer` / `Informer`.
+W projekcie porównujemy 4 paradygmaty modelowania:
+1. **Klasyczne bazy statystyczne**: `AutoARIMA` / `SARIMA` oraz `SeasonalNaive` (poprzez `statsforecast`).
+2. **Głębokie modele bez uwagi (MLP / Linear Family)**: `N-BEATS`, `N-HiTS` oraz `DLinear` (poprzez `neuralforecast`).
+3. **Nowoczesne Transformery (Attention Family)**: `PatchTST` (sub-series patching) oraz `iTransformer` (odwrócona uwaga między zmiennymi).
+4. **Modele Fundacyjne (Foundation Models / Zero-Shot)**: `Chronos-Bolt` (Amazon, ewaluacja bez dotrenowywania na zbiorze).
+
+Do strojenia modeli używamy **Optuna**, a przewagi modeli weryfikujemy testami istotności statystycznej (**Diebold-Mariano**, **Wilcoxon**, **Friedman + Nemenyi**).
 
 Szczegółowy harmonogram prac i podział na fazy znajduje się w [**`docs/PROJECT_PLAN.md`**](file:///Users/rzadkows/coding/studies/machine-learning/project/docs/PROJECT_PLAN.md).
 

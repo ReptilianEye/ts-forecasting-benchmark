@@ -5,13 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "chronos-forecasting>=2.3.2",
     "gdown>=6.4.2",
     "matplotlib>=3.11.2",
     "neuralforecast>=3.3.0",
     "numpy>=2.5.4",
+    "optuna>=5.0.0",
     "pandas>=3.0.6",
     "requests>=2.34.2",
     "scikit-learn>=1.9.1",
+    "scikit-posthocs>=0.17.1",
     "scipy>=1.18.1",
     "seaborn>=0.13.2",
     "statsforecast>=2.0.1",

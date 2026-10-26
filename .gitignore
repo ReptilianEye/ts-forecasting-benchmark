@@ -48,6 +48,7 @@ data/processed/*.parquet
 
 # Model checkpoints & large result files
 results/**/*.pt
+lightning_logs/
 results/**/*.pth
 results/**/*.ckpt
 !results/**/.gitkeep
