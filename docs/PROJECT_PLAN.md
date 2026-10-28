@@ -1,154 +1,143 @@
 # Machine Learning Project 5: Roadmap & Implementation Plan
-**"Prognozowanie szeregów czasowych: czy mechanizm uwagi jest potrzebny?"**
+**"Prognozowanie szeregów czasowych: czy mechanizm uwagi jest potrzebny?"**  
 *(Time Series Forecasting: Is the Attention Mechanism Needed?)*
 
 ---
 
 ## 1. Executive Summary & Research Hypothesis
 
-* **Core Question**: Czy mechanizm uwagi (Self-Attention) jest niezbędny do uzyskania najwyższej jakości prognoz w szeregach czasowych, czy też prostsze modele liniowe z dekompozycją szeregu (DLinear, NLinear) oferują porównywalną lub lepszą jakość przy ułamku kosztu obliczeniowego?
-* **Experimental Scope**: Porównanie modeli liniowych (bez uwagi) z architekturami Transformerowymi (z uwagą) na kanonicznych benchmarkach LTSF (ETTh1, ETTh2, ETTm1, ETTm2, Weather, Electricity, Traffic).
-* **Two-Tier Execution Strategy**:
-  * **Dev / Pilot Mode**: Szybkie uruchomienia (ETTh1, Weather, horyzonty $H \in \{96, 192\}$, mała liczba epok/early stopping) do bieżącej weryfikacji i debugowania.
-  * **Full Benchmark Mode**: Pełna macierz eksperymentalna ($7 \text{ zbiorów} \times 4 \text{ horyzonty } \{96, 192, 336, 720\}$) na potrzeby końcowego raportu i obrony.
+* **Pytanie Badawcze**: Czy mechanizm uwagi (Self-Attention w architekturach Transformerowych) jest rzeczywiście niezbędny do osiągnięcia najwyższej jakości predykcji, czy też:
+  1. Klasyczne bazy statystyczne (**ARIMA / SARIMA**),
+  2. Zaawansowane sieci MLP z dekompozycją hierarchiczną (**N-BEATS, N-HiTS, DLinear**),
+  3. Uniwersalne modele fundacyjne w trybie Zero-Shot (**Chronos-Bolt / Chronos 2**),
+  zapewniają porównywalną lub lepszą dokładność przy niższym koszcie obliczeniowym i braku konieczności kosztownego trenowania od zera?
+* **Strategia Realizacji (Zgodnie z ustaleniami z prowadzącym)**:
+  * **Zero re-inventing the wheel**: Nie implementujemy architektur głębokich od zera w czystym PyTorch. Wykorzystujemy sprawdzone, zoptymalizowane biblioteki produkcyjne: `statsforecast` (modele statystyczne), `neuralforecast` (sieci głębokie) oraz Hugging Face / Amazon (`chronos-forecasting` dla modeli fundacyjnych).
+  * **Uczciwy Benchmark (Fair Comparison)**: Zastosowanie biblioteki **Optuna** do automatycznego tuningu kluczowych hiperparametrów (długość okna wejściowego $L$, *learning rate*, wielkość batcha) w celu wyeliminowania błędu suboptymalnej konfiguracji.
+  * **Ewaluacja Zero-Shot**: Modele LLM / Foundation (Chronos) testowane bez uczenia na zbiorze docelowym (zero-run).
+  * **Rygor Statystyczny**: Weryfikacja różnic w wynikach za pomocą testów istotności statystycznej (**Diebolda-Mariano**, **Wilcoxona** oraz **Friedmana + Nemenyi** / diagram CD).
 
 ---
 
-## 2. Pytania Otwarte do Prowadzącego (Questions for Instructor)
+## 2. Architektura Modeli w Benchmarku
 
-Przed finalizacją implementacji zaawansowanych modeli warto skonsultować z prowadzącym następujące kwestie:
-
-> [!IMPORTANT]
-> 1. **Czysty PyTorch vs Biblioteki (`neuralforecast`)**:
->    Czy modele bardziej złożone (np. PatchTST, iTransformer, Autoformer) mogą korzystać ze zweryfikowanych implementacji z biblioteki `neuralforecast`, czy wszystkie modele muszą być zaimplementowane w czystym PyTorch od zera? *(Rekomendacja: podejście hybrydowe — DLinear/NLinear oraz rdzeń PatchTST od zera w PyTorch, a pozostałe/baseliny jako punkt odniesienia z `neuralforecast`)*.
-> 2. **Wymagana macierz zbiorów i horyzontów**:
->    Czy ocena wymaga przetestowania pełnej macierzy 7 zbiorów na 4 horyzontach ($7 \times 4 = 28$ konfiguracji na model), czy dopuszczalne jest skupienie się na wybranej podgrupie (np. ETTh1, ETTm1, Weather, Electricity) dla horyzontów 96 i 336?
-> 3. **Format raportu końcowego**:
->    Czy oczekiwany jest raport w formie Jupyter Notebook, publikacji w formacie LaTeX/PDF, czy repozytorium kodu z podsumowaniem w `results/`?
-
----
-
-## 3. Szczegółowy Plan Implementacji (Phased Roadmap)
+Modele podzielono na 4 logiczne grupy reprezentujące różne paradygmaty:
 
 ```mermaid
 flowchart TD
-    subgraph P1["Faza 1: Modele Liniowe (No Attention)"]
-        L1["Baseline Statystyczny (Naive, Seasonal Naive)"] --> L2["Standard Linear Layer"]
-        L2 --> L3["DLinear (Trend + Seasonal Decomposition)"]
-        L3 --> L4["NLinear (Distribution Shift Normalization)"]
+    subgraph G1["1. Klasyczne Modele Statystyczne (statsforecast)"]
+        S1["Baseline: Naive / Seasonal Naive"]
+        S2["AutoARIMA / SARIMA (estymacja rzędów p,d,q, P,D,Q)"]
     end
 
-    subgraph P2["Faza 2: Modele Transformera (Attention)"]
-        T1["Autoformer / Informer (Wczesne Transformery)"]
-        T2["PatchTST (Sub-series Patching + Channel Independence)"]
-        T3["iTransformer (Inverted Tokenization across Variates)"]
+    subgraph G2["2. Głębokie Sieci MLP bez Uwagi (neuralforecast)"]
+        M1["DLinear / NLinear (dekompozycja liniowa)"]
+        M2["N-BEATS (podwójne powiązania rezydualne)"]
+        M3["N-HiTS (hierarchiczna interpolacja wieloskalowa)"]
     end
 
-    subgraph P3["Faza 3: Silnik Treningu i Ewaluacji"]
-        E1["Jednolity Trainer (PyTorch + MPS/CUDA)"]
-        E2["Kalkulator Metryk (MSE, MAE, compute time)"]
-        E3["Zarządzanie Eksperymentami (configs/*.yaml)"]
+    subgraph G3["3. Transformery z Mechanizmem Uwagi (neuralforecast)"]
+        T1["PatchTST (sub-series patching + channel independence)"]
+        T2["iTransformer (odwrócona uwaga wzdłuż zmiennych)"]
     end
 
-    subgraph P4["Faza 4: Dwuetapowa Ewaluacja"]
-        D1["Dev Pilot Suite (ETTh1, Weather | H=96, 192)"]
-        D2["Full Benchmark Suite (7 zbiorów | H=96, 192, 336, 720)"]
+    subgraph G4["4. Modele Fundacyjne / LLM Zero-Shot (Hugging Face)"]
+        F1["Chronos-Bolt / Chronos (Amazon)"]
+        F2["Opcjonalnie: TimesFM (Google) / MOIRAI (Salesforce)"]
     end
 
-    P1 --> P3
-    P2 --> P3
-    P3 --> P4
+    subgraph Bench["Silnik Ewaluacji i Optymalizacji"]
+        OPT["Tuning Hiperparametrów: Optuna (TPE + MedianPruner)"]
+        TEST["Testy Statystyczne: Diebold-Mariano, Wilcoxon, Friedman+Nemenyi"]
+    end
+
+    G1 --> Bench
+    G2 --> Bench
+    G3 --> Bench
+    G4 --> Bench
 ```
 
 ---
 
-### Faza 1: Rodzina Modeli Liniowych (Czysty PyTorch & Baseline)
-- [ ] **1.1. Naiwne bazy odniesienia**:
-  - Implementacja `Naive` (ostatnia znana wartość) oraz `SeasonalNaive` (wartość z poprzedniego cyklu dobowego/tygodniowego) za pomocą `statsforecast`.
-- [ ] **1.2. Prosty model liniowy (`Linear`)**:
-  - Pojedyncza warstwa liniowa mapująca okno $L$ bezpośrednio w horyzont $H$.
-- [ ] **1.3. `DLinear` (Dekompozycja szeregu)**:
-  - Blok `SeriesDecomp` (średnia ruchoma wyodrębniająca trend i resztę sezonową).
-  - Dwie niezależne warstwy liniowe: $W_{\text{trend}}$ dla trendu i $W_{\text{seasonal}}$ dla składowej okresowej.
-  - Sumowanie wyjść: $\hat{Y} = \hat{Y}_{\text{trend}} + \hat{Y}_{\text{seasonal}}$.
-- [ ] **1.4. `NLinear` (Normalizacja przesunięcia dystrybucji)**:
-  - Odjęcie ostatniej wartości okna wejściowego ($X - X_{L}$), przejście przez warstwę liniową, dodanie $X_{L}$ do prognozy.
-  - Eliminuje błąd przy trendach nieregularnych i gwałtownych zmianach średniej.
+## 3. Szczegółowy Plan Działań (Fazy Projektu)
+
+### Faza 1: Konfiguracja Środowiska i Nowe Zależności
+- [x] **1.1. Rozszerzenie `pyproject.toml` o nowe pakiety**:
+  - `optuna` (optymalizacja bayesowska hiperparametrów).
+  - `chronos-forecasting` / `transformers` (dla modeli fundacyjnych Chronos / Chronos-Bolt).
+  - `scikit-posthocs` (dla testów Nemenyi i generowania wykresów Critical Difference).
+  - Synchronizacja przez `uv sync`.
+- [x] **1.2. Standaryzacja wejścia danych pod `statsforecast` / `neuralforecast`**:
+  - Konwersja zbiorów benchmarkowych (`ETTh1`, `Weather`, `Electricity` itd.) do standardowego formatu tabelarycznego: kolumny `[unique_id, ds, y]` akceptowanego natywnie przez obie biblioteki bez zbędnego boilerplate'u (`load_long_benchmark` w `dataset.py`).
 
 ---
 
-### Faza 2: Rodzina Transformera (Mechanizmy Uwagi)
-- [ ] **2.1. Wczesne Transformery (Autoformer / Informer)**:
-  - Wykorzystanie jako punkt odniesienia pokazujący, dlaczego klasyczny mechanizm uwagi zawodził na szeregach (głównie przez tokenizację pojedynczych kroków czasowych).
-- [ ] **2.2. `PatchTST` (Nowoczesny Transformer Szeregów)**:
-  - Tokenizacja: podział szeregu na nachodzące na siebie "patche" (np. długość patcha $P=16$, krok $S=8$).
-  - Niezależność kanałów (*Channel Independence*): każdy kanał traktowany jako osobny szereg jednozmienny współdzielący wagi uwagi.
-  - Warstwy Multi-Head Self-Attention operujące na patchach.
-- [ ] **2.3. `iTransformer` (Odwrócony Transformer)**:
-  - Odwrócenie osi uwagi: cały szereg czasowy danej zmiennej staje się jednym tokenem, a uwaga liczona jest *pomiędzy zmiennymi* (cross-variate correlation).
+### Faza 2: Implementacja Pipeline'u Modeli (Pre-built Integrations)
+
+- [ ] **2.1. Pipeline Modeli Statystycznych (`src/ts_forecasting_benchmark/models/statistical.py`)**:
+  - Wykorzystanie `StatsForecast(models=[AutoARIMA(season_length=...), SeasonalNaive(...)], freq=...)`.
+  - Zapewnienie szybkiego fittingu na CPU.
+- [ ] **2.2. Pipeline Głębokich Modeli MLP i Transformerów (`src/ts_forecasting_benchmark/models/neural.py`)**:
+  - Wykorzystanie `NeuralForecast`:
+    * MLP / Linear: `NBEATS`, `NHITS`, `DLinear`.
+    * Attention: `PatchTST`, `iTransformer`.
+  - Konfiguracja akceleracji sprzętowej (`accelerator="mps"` na Apple Silicon lub `"cuda"` / `"cpu"`).
+- [ ] **2.3. Pipeline Modeli Fundacyjnych Zero-Shot (`src/ts_forecasting_benchmark/models/foundation.py`)**:
+  - Integracja `ChronosBoltPipeline` (model `amazon/chronos-bolt-mini` / `base`).
+  - Ewaluacja w trybie **Zero-Shot** (brak fittingu; podajemy wyłącznie okno kontekstowe $L$ i generujemy prognozę na horyzont $H$).
 
 ---
 
-### Faza 3: Zunifikowany Silnik Treningu i Eksperymentów
-- [ ] **3.1. Standardowy Trainer (`src/ts_forecasting_benchmark/trainer.py`)**:
-  - Obsługa akceleracji Apple Silicon (`mps`), Nvidia (`cuda`) oraz `cpu`.
-  - Funkcja straty: MSE / L1 Loss.
-  - Optymalizator `AdamW` + Cosine Annealing learning rate scheduler.
-  - Early stopping na zbiorze walidacyjnym (patience = 5).
-- [ ] **3.2. Konfiguracja eksperymentów (`configs/`)**:
-  - Przeniesienie hiperparametrów do plików konfiguracyjnych (rozmiar batcha, learning rate, okno $L$, horyzonty $H$, dropout).
-- [ ] **3.3. Kolektor Metryk (`src/ts_forecasting_benchmark/evaluation/`)**:
-  - Obliczanie znormalizowanego i odwróconego MSE, MAE.
-  - Zliczanie liczby parametrów i czasu trwania epoki (koszt obliczeniowy).
-  - Zapisywanie wyników w formacie CSV / Markdown w `results/metrics/`.
+### Faza 3: Optymalizacja Hiperparametrów z Optuna
+
+- [ ] **3.1. Moduł wyszukiwania Optuna (`src/ts_forecasting_benchmark/tuning/optuna_study.py`)**:
+  - Przestrzeń poszukiwań (*search space*) dla modeli głębokich (`NHITS`, `NBEATS`, `PatchTST`, `DLinear`):
+    * `input_size` (okno $L$): próby ze zbioru $\{96, 192, 336, 512\}$.
+    * `learning_rate`: rozkład logarytmiczny $\log(10^{-5}, 10^{-2})$.
+    * `batch_size`: $\{32, 64, 128\}$.
+    * specyficzne parametry architektury (np. liczba stosów/bloków, dropout).
+  - Strategia próbkowania: `TPESampler` (Tree-structured Parzen Estimator).
+  - Wczesne odrzucanie słabych konfiguracji: `MedianPruner` (zatrzymuje trening po kilku epokach, jeśli walidacyjny błąd jest powyżej mediany).
+- [ ] **3.2. Izolacja zbioru**:
+  - Strojenie hiperparametrów przeprowadzane wyłącznie na podzbiorze walidacyjnym (np. `ETTh1` i `Weather`), a znalezione optymalne konfiguracje testowane na pozostałych benchmarkach.
 
 ---
 
-### Faza 4: Dwuetapowa Ewaluacja (Dev vs Full Benchmark)
-- [ ] **4.1. Tryb szybki (Dev Pilot Mode)**:
-  - Skrypt `scripts/run_pilot_benchmark.py`:
-    - Zbiory: `ETTh1` oraz `Weather`.
-    - Horyzonty: $H \in \{96, 192\}$.
-    - Czas wykonania: ~5-10 minut na maszynie lokalnej.
-    - Cel: natychmiastowa weryfikacja poprawności kodu, formatu metryk i wykresów.
-- [ ] **4.2. Tryb pełny (Full Benchmark Mode)**:
-  - Skrypt `scripts/run_full_benchmark.py`:
-    - Wszystkie 7 zbiorów danych.
-    - Horyzonty $H \in \{96, 192, 336, 720\}$.
-    - Generowanie kompletnej tabeli wynikowej (zbliżonej do tabel w artykułach DLinear i PatchTST).
+### Faza 4: Dwuetapowy Eksperyment (Pilot vs Full Benchmark)
+
+- [x] **4.1. Pilot Benchmark (Szybka weryfikacja poprawności)**:
+  - Zbiory: `ETTh1` (target: `OT`).
+  - Horyzont: $H = 96$.
+  - Modele: `SeasonalNaive`, `AutoARIMA`, `NHITS`, `Chronos-Bolt (Zero-Shot)`.
+  - Zweryfikowane w `scripts/run_pilot_benchmark.py`.
+- [ ] **4.2. Pełny Benchmark**:
+  - Zbiory: Pełna paleta benchmarkowa (`ETTh1`, `ETTm1`, `Weather`, `Electricity`).
+  - Horyzonty: $H \in \{96, 192, 336, 720\}$.
+  - Zapis surowych predykcji i reszt (niezbędnych do testów statystycznych) w `results/metrics/predictions/`.
 
 ---
 
-### Faza 5: Synteza Wyników i Wnioski
-- [ ] **5.1. Tabela porównawcza zbiorcza**:
-  - Zestawienie MSE / MAE dla każdego modelu na każdym zbiorze i horyzoncie.
-- [ ] **5.2. Odpowiedź na pytanie badawcze**:
-  - Wskazanie, w jakich reżimach (krótki vs długi horyzont, mała vs duża liczba zmiennych) uwaga daje przewagę, a kiedy modele liniowe są bezkonkurencyjne pod względem dokładności i efektywności.
-- [ ] **5.3. Notebook podsumowujący (`notebooks/final_evaluation_report.ipynb`)**:
-  - Wykresy predykcji vs dane rzeczywiste dla najciekawszych przypadków (np. gwałtowne zmiany temperatury, wahania w ruchu drogowym).
+### Faza 5: Testy Istotności Statystycznej i Analiza Wyników
+
+- [ ] **5.1. Moduł testów statystycznych (`src/ts_forecasting_benchmark/evaluation/statistical_tests.py`)**:
+  - **Test Diebolda-Mariano (DM)**: Porównanie par modeli (np. `DLinear` vs `PatchTST`, `NHITS` vs `Chronos`) z uwzględnieniem autokorelacji błędów predykcji wielokrokowej.
+  - **Test Wilcoxona dla par**: Sprawdzenie czy różnice median błędów są istotne statystycznie ($p < 0.05$).
+  - **Test Friedmana + post-hoc Nemenyi**: Analiza rangowa wszystkich modeli na macierzy zbiór $\times$ horyzont.
+- [ ] **5.2. Wizualizacje i Raport Końcowy**:
+  - Wykres **Critical Difference (CD) Diagram** (pokazujący grupy modeli statystycznie równoważnych).
+  - Wykres **Pareto Front**: Dokładność (MSE) w funkcji czasu uczenia/inferencji (podkreślenie przewagi modeli liniowych/N-HiTS i zero-shot).
+  - Przykładowe wykresy prognoz vs rzeczywistość w Jupyter Notebook (`notebooks/final_evaluation_report.ipynb`).
 
 ---
 
-## 4. Backlog: Zaawansowane Analizy (Plans for Future)
+## 4. Następne Zadania do Zrobienia (Aktualny Sprint & GitHub Issues)
 
-> [!NOTE]
-> Poniższe punkty stanowią wartościowe rozszerzenie analizy w pracy/raporcie, odłożone do realizacji w zależności od dostępnego czasu:
-
-* **B1. Wykres Frontu Pareto (Accuracy vs Compute Cost)**:
-  * Wykres MSE w funkcji czasu uczenia (lub liczby operacji FLOPs/parametrów). Wizualny dowód, o ile rzędów wielkości modele liniowe są lżejsze od Transformerów przy zbliżonym błędzie.
-* **B2. Wizualizacja Map Uwagi (Attention Map Inspection)**:
-  * Ekstrakcja macierzy wag uwagi z PatchTST / iTransformer dla wybranych sekwencji testowych.
-  * Analiza, czy uwaga faktycznie odnajduje wzorce okresowe (np. dobowe piki), czy ulega rozmyciu.
-* **B3. Eksperyment ze skalowaniem okna wejściowego ($L \in \{96, 192, 336, 512, 720\}$)**:
-  * Sprawdzenie hipotezy z publikacji DLinear: czy wraz ze wzrostem $L$ modele liniowe zaczynają przeuczać na szumie, podczas gdy Transformer z patchowaniem nadal poprawia wyniki.
-
----
-
-## 5. Natychmiastowe Następne Kroki (Immediate Checklist)
-
-1. [ ] **Krok 1**: Zaimplementować bazowe modele liniowe w czystym PyTorch:
-   - `src/ts_forecasting_benchmark/models/linear.py` (`LinearModel`, `DLinearModel`, `NLinearModel`).
-2. [ ] **Krok 2**: Utworzyć moduł ujednoliconego treningu:
-   - `src/ts_forecasting_benchmark/models/trainer.py`.
-3. [ ] **Krok 3**: Uruchomić pierwszy szybki test treningowy DLinear na zbiorze `ETTh1` ($L=96, H=96$).
+1. [x] **Zadanie 1**: Dodać pakiety `optuna`, `chronos-forecasting`, `scikit-posthocs` do `pyproject.toml`.
+2. [x] **Zadanie 2**: Przygotować `load_long_benchmark` w `src/ts_forecasting_benchmark/data/dataset.py`.
+3. [x] **Zadanie 3**: Uruchomić `scripts/run_pilot_benchmark.py` (SeasonalNaive, AutoARIMA, NHITS, Chronos-Bolt).
+4. [ ] **Zadanie 4** ([Issue #1](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/1)): Dodać pozostałe modele do porównania: `DLinear`, `N-BEATS` oraz `PatchTST` w skrypcie benchmarkowym.
+5. [ ] **Zadanie 5** ([Issue #2](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/2)): Zaimplementować moduł testów statystycznych (`src/ts_forecasting_benchmark/evaluation/statistical_tests.py` - Diebold-Mariano i Wilcoxon).
+6. [ ] **Zadanie 6** ([Issue #3](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/3)): Przygotować skrypt strojenia Optuna dla modeli głębokich (`scripts/tune_optuna.py`).
+7. [ ] **Zadanie 7** ([Issue #4](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/4)): Pełny benchmark LTSF (wielokrotne okna i horyzonty na ETTh1, Weather, Electricity).
+8. [ ] **Zadanie 8** ([Issue #5](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/5)): Raport podsumowujący, wykres frontu Pareto oraz Critical Difference diagram.
 

@@ -2,8 +2,10 @@
 
 from ts_forecasting_benchmark.data.dataset import (
     SPLIT_CONFIGS,
+    LongBenchmarkData,
     TimeSeriesBenchmarkDataset,
     load_benchmark_dataframe,
+    load_long_benchmark,
     to_neuralforecast_df,
 )
 from ts_forecasting_benchmark.data.download import (
@@ -25,6 +27,8 @@ __all__ = [
     "convert_tsf_to_dataframe",
     "to_long_format",
     "load_benchmark_dataframe",
+    "load_long_benchmark",
+    "LongBenchmarkData",
     "TimeSeriesBenchmarkDataset",
     "SPLIT_CONFIGS",
     "to_neuralforecast_df",
