@@ -3,7 +3,7 @@
 
 Runs a quick pilot evaluation comparing:
 1. Statistical Baseline: SeasonalNaive / AutoARIMA (StatsForecast)
-2. MLP / Basis Expansion: N-HiTS (NeuralForecast)
+2. Linear / MLP and attention models (NeuralForecast)
 3. Foundation Model (Zero-Shot): Chronos-Bolt (Amazon)
 
 Evaluates on ETTh1 (target: OT) for horizon H=96.
@@ -25,6 +25,8 @@ import torch
 
 from ts_forecasting_benchmark.data import load_long_benchmark
 from ts_forecasting_benchmark.evaluation import compute_metrics
+from ts_forecasting_benchmark.models.neural import get_neural_models
+from ts_forecasting_benchmark.utils import get_device, set_seed
 
 
 def parse_args():
@@ -33,7 +35,20 @@ def parse_args():
     parser.add_argument("--target", type=str, default="OT", help="Target column name")
     parser.add_argument("--horizon", type=int, default=96, help="Forecast horizon (H)")
     parser.add_argument("--input-size", type=int, default=96, help="Lookback window (L)")
-    parser.add_argument("--nhits-steps", type=int, default=50, help="Max training steps for NHITS pilot")
+    parser.add_argument(
+        "--max-steps",
+        "--nhits-steps",
+        dest="max_steps",
+        type=int,
+        default=50,
+        help="Max training steps per neural model",
+    )
+    parser.add_argument(
+        "--accelerator",
+        choices=["cpu", "mps", "cuda"],
+        default=get_device().type,
+        help="Device for neural and foundation models",
+    )
     parser.add_argument(
         "--chronos-model",
         type=str,
@@ -45,6 +60,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    set_seed(42)
     print("=" * 70)
     print("🚀 STARTING PILOT TIME SERIES BENCHMARK")
     print(f"Dataset: {args.dataset} (Target: {args.target}) | Horizon H={args.horizon} | Lookback L={args.input_size}")
@@ -58,9 +74,7 @@ def main():
     print(f"  Test samples:  {len(data.test_df):,}")
     print(f"  Frequency:     {data.freq}")
 
-    # For pilot evaluation, test on the first test window of length H
-    # (or right after train + val)
-    val_and_test = pd.concat([data.val_df, data.test_df]).sort_values("ds").reset_index(drop=True)
+    history = pd.concat([data.train_df, data.val_df]).sort_values("ds").reset_index(drop=True)
     # Target ground truth for the first horizon of the test split
     ground_truth = data.test_df.iloc[: args.horizon].copy()
     y_true = ground_truth["y"].values
@@ -78,8 +92,8 @@ def main():
     ]
     sf = StatsForecast(models=stat_models, freq=data.freq, n_jobs=1)
     
-    # Fit on train data
-    sf.fit(df=data.train_df)
+    # Fit on history preceding the test split
+    sf.fit(df=history)
     stat_preds = sf.predict(h=args.horizon)
     stat_time = time.time() - t0
 
@@ -98,42 +112,49 @@ def main():
             })
             print(f"  ✅ {m_name:15s} -> MSE: {metrics['mse']:.4f} | MAE: {metrics['mae']:.4f}")
 
-    # 3. Deep Learning MLP: N-HiTS (NeuralForecast)
-    # TODO(models): Add DLinear, NBEATS, and PatchTST / iTransformer into the NeuralForecast ensemble
-    print("\n[3/5] 🧠 Running Deep Learning MLP: N-HiTS (NeuralForecast)...")
-    try:
-        from neuralforecast import NeuralForecast
-        from neuralforecast.models import NHITS
+    # 3. NeuralForecast models
+    print("\n[3/5] 🧠 Running neural models (MLP / Linear & Attention)...")
+    from neuralforecast import NeuralForecast
 
-        t0 = time.time()
-        # Train on train_df
-        nhits_model = NHITS(
-            h=args.horizon,
-            input_size=args.input_size,
-            max_steps=args.nhits_steps,
-            batch_size=64,
-            learning_rate=1e-3,
-        )
-        nf = NeuralForecast(models=[nhits_model], freq=data.freq)
-        nf.fit(df=data.train_df, val_size=args.horizon)
-        nhits_preds = nf.predict()
-        nhits_time = time.time() - t0
-
-        if "NHITS" in nhits_preds.columns:
-            y_pred = nhits_preds["NHITS"].values[: args.horizon]
+    models = get_neural_models(
+        h=args.horizon,
+        input_size=args.input_size,
+        max_steps=args.max_steps,
+        n_series=data.train_df["unique_id"].nunique(),
+        accelerator=args.accelerator,
+    )
+    for model in models:
+        name = str(model)
+        try:
+            t0 = time.time()
+            nf = NeuralForecast(models=[model], freq=data.freq)
+            nf.fit(df=data.train_df, val_size=args.horizon)
+            preds = nf.predict(df=history)
+            model_time = time.time() - t0
+            aligned = ground_truth.merge(preds, on=["unique_id", "ds"], validate="one_to_one")
+            if len(aligned) != args.horizon:
+                raise ValueError("Forecast dates do not match the test horizon")
+            y_pred = aligned[name].to_numpy()
+            y_true = aligned["y"].to_numpy()
             metrics = compute_metrics(y_true, y_pred)
-            forecasts["NHITS"] = y_pred
-            results.append({
-                "Model": "N-HiTS",
-                "Paradigm": "Deep Learning (MLP)",
-                "MSE": metrics["mse"],
-                "MAE": metrics["mae"],
-                "Time (s)": round(nhits_time, 2),
-                "Zero-Shot": False,
-            })
-            print(f"  ✅ {'N-HiTS':15s} -> MSE: {metrics['mse']:.4f} | MAE: {metrics['mae']:.4f} (trained in {nhits_time:.1f}s)")
-    except Exception as e:
-        print(f"  ❌ Error running N-HiTS: {e}")
+            forecasts[name] = y_pred
+            results.append(
+                {
+                    "Model": name,
+                    "Paradigm": "Deep Learning (Attention)"
+                    if name in {"PatchTST", "iTransformer"}
+                    else "Deep Learning (MLP / Linear)",
+                    "MSE": metrics["mse"],
+                    "MAE": metrics["mae"],
+                    "Time (s)": round(model_time, 2),
+                    "Zero-Shot": False,
+                }
+            )
+            print(
+                f"  ✅ {name:15s} -> MSE: {metrics['mse']:.4f} | MAE: {metrics['mae']:.4f} (fit + predict in {model_time:.1f}s)"
+            )
+        except Exception as e:
+            print(f"  ❌ Error running {name}: {e}")
 
     # 4. Foundation Model Zero-Shot: Chronos-Bolt
     print("\n[4/5] 🔮 Running Foundation Model: Chronos-Bolt (Zero-Shot)...")
@@ -141,7 +162,7 @@ def main():
         from chronos import ChronosBoltPipeline
 
         t0 = time.time()
-        device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+        device = args.accelerator
         print(f"  Loading Chronos-Bolt pipeline ({args.chronos_model}) on {device}...")
         pipeline = ChronosBoltPipeline.from_pretrained(
             args.chronos_model,
@@ -150,7 +171,7 @@ def main():
         )
 
         # Context: last `input_size` points from training/val before the test horizon
-        context_series = data.train_df["y"].values[-args.input_size :]
+        context_series = history["y"].values[-args.input_size :]
         context_tensor = torch.tensor(context_series, dtype=torch.float32).unsqueeze(0)
 
         # Zero-shot prediction (no training!)
@@ -206,6 +227,7 @@ def main():
     plt.plot(time_steps, y_true, label="Ground Truth (Actual)", color="black", linewidth=2.0)
 
     colors = {"SeasonalNaive": "#94a3b8", "AutoARIMA": "#3b82f6", "N-HiTS": "#10b981", "Chronos-Bolt": "#8b5cf6"}
+    colors.update({"DLinear": "#f59e0b", "N-BEATS": "#06b6d4", "PatchTST": "#ef4444", "iTransformer": "#ec4899"})
     for name, pred in forecasts.items():
         plt.plot(
             time_steps,

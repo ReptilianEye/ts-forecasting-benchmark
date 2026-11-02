@@ -50,6 +50,22 @@ uv run python scripts/verify_datasets.py
 ```
 Powinieneś zobaczyć zielone komunikaty `✅ OK` dla wszystkich 7 zbiorów danych oraz dla loadera Monash.
 
+### Pilot benchmark
+
+Pilot porównuje `SeasonalNaive`, `AutoARIMA`, `N-HiTS`, `DLinear`, `N-BEATS`,
+`PatchTST`, `iTransformer` i `Chronos-Bolt` na ETTh1 (target `OT`, H=96, L=96).
+Modele neuronowe są konfigurowane w `src/ts_forecasting_benchmark/models/neural.py`.
+
+```bash
+uv run python scripts/run_pilot_benchmark.py --accelerator cpu --max-steps 50
+```
+
+Na Apple Silicon użyj `--accelerator mps`, a na karcie NVIDIA `--accelerator cuda`.
+Bez tej opcji urządzenie jest wybierane automatycznie. `--max-steps` ustawia liczbę
+kroków treningu każdego modelu neuronowego (dotychczasowe `--nhits-steps` nadal działa).
+Prognozy dotyczą pierwszych 96 punktów testu i korzystają z historii do końca walidacji.
+Metryki i wykres trafiają do `results/metrics/` i `results/figures/`.
+
 ---
 
 ## 📂 Gdzie co znaleźć? (Przewodnik po Strukturze)

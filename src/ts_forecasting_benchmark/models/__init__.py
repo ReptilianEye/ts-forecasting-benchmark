@@ -9,5 +9,4 @@ Paradigms:
 
 # TODO(models): Implement modular model registry/factory in src/ts_forecasting_benchmark/models/
 #   - statistical.py: get_statistical_models(freq, season_length)
-#   - neural.py: get_neural_models(h, input_size, accelerator)
 #   - foundation.py: get_chronos_pipeline(model_id, device)
