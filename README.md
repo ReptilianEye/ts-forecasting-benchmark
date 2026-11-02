@@ -66,6 +66,36 @@ kroków treningu każdego modelu neuronowego (dotychczasowe `--nhits-steps` nada
 Prognozy dotyczą pierwszych 96 punktów testu i korzystają z historii do końca walidacji.
 Metryki i wykres trafiają do `results/metrics/` i `results/figures/`.
 
+### Strojenie modeli (Optuna)
+
+```bash
+uv run python scripts/tune_optuna.py --models DLinear PatchTST --n-trials 20 --accelerator cpu
+```
+
+Bez `--models` skrypt stroi wszystkie pięć sieci: `NHITS`, `DLinear`, `NBEATS`,
+`PatchTST`, `iTransformer`. Domyślnie używa ETTh1, targetu `OT`, horyzontu 96
+i 500 kroków treningu na próbę. `--dataset`, `--target`, `--horizon`, `--max-steps`
+i `--val-check-steps` pozwalają zmienić eksperyment; urządzenia są takie jak w pilocie.
+
+Dla każdej sieci powstaje osobne badanie z `TPESampler` i `MedianPruner`.
+Strojone są: okno wejściowe (96, 192, 336, 512), learning rate (logarytmicznie
+od 1e-5 do 1e-2), batch size (32, 64, 128) oraz ustawienia właściwe dla architektury.
+Batch size ustawia też `windows_batch_size`, więc zmienia liczbę przykładów
+w kroku treningu również dla pojedynczego szeregu. N-BEATS stroi liczbę bloków,
+NHITS także dropout, DLinear okno średniej ruchomej, a Transformery rozmiar sieci,
+liczbę warstw i dropout.
+
+Sieci uczą się wyłącznie na treningu. Cel to końcowe MSE na oknach z wydzielonej
+walidacji; test nie bierze udziału w wyborze parametrów. Pierwsze pięć prób służy
+rozruchowi, a pruning zaczyna się od drugiej kontroli walidacji. Mała liczba prób
+i kroków służy sprawdzeniu działania, nie gwarantuje dobrego dostrojenia.
+
+Najlepsze konfiguracje i walidacyjne MSE są zapisywane po każdym modelu do
+`configs/best_params.yaml` (inna ścieżka przez `--output`). Nowe uruchomienie
+nadpisuje ten plik wynikami wybranych modeli. Pole `params` zawiera argumenty
+konstruktora modelu; przy odtwarzaniu trzeba użyć `loss=MSE(), valid_loss=MSE()`.
+Pilot nadal korzysta ze swoich ustawień — nie wczytuje automatycznie tego pliku.
+
 ---
 
 ## 📂 Gdzie co znaleźć? (Przewodnik po Strukturze)
