@@ -6,15 +6,20 @@ from ts_forecasting_benchmark.evaluation.metrics import (
     mse,
     rmse,
 )
-
-# TODO(evaluation): Implement statistical significance tests in statistical_tests.py:
-#   - diebold_mariano_test(y_true, y_pred1, y_pred2, h)
-#   - wilcoxon_test(errors_model1, errors_model2)
-#   - plot_critical_difference(matrix_of_ranks, model_names)
+from ts_forecasting_benchmark.evaluation.statistical_tests import (
+    diebold_mariano_test,
+    friedman_nemenyi_test,
+    plot_critical_difference,
+    wilcoxon_test,
+)
 
 __all__ = [
     "compute_metrics",
     "mse",
     "mae",
     "rmse",
+    "diebold_mariano_test",
+    "wilcoxon_test",
+    "friedman_nemenyi_test",
+    "plot_critical_difference",
 ]
