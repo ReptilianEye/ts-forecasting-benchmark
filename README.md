@@ -66,6 +66,9 @@ kroków treningu każdego modelu neuronowego (dotychczasowe `--nhits-steps` nada
 Prognozy dotyczą pierwszych 96 punktów testu i korzystają z historii do końca walidacji.
 Metryki i wykres trafiają do `results/metrics/` i `results/figures/`.
 
+Testy DM, Wilcoxona, Friedmana + Nemenyi i diagram CD są dostępne w module
+`evaluation`. Format danych i przykłady opisano w [docs/STATISTICAL_TESTS.md](docs/STATISTICAL_TESTS.md).
+
 ---
 
 ## 📂 Gdzie co znaleźć? (Przewodnik po Strukturze)
