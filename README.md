@@ -96,6 +96,9 @@ nadpisuje ten plik wynikami wybranych modeli. Pole `params` zawiera argumenty
 konstruktora modelu; przy odtwarzaniu trzeba użyć `loss=MSE(), valid_loss=MSE()`.
 Pilot nadal korzysta ze swoich ustawień — nie wczytuje automatycznie tego pliku.
 
+Testy DM, Wilcoxona, Friedmana + Nemenyi i diagram CD są dostępne w module
+`evaluation`. Format danych i przykłady opisano w [docs/STATISTICAL_TESTS.md](docs/STATISTICAL_TESTS.md).
+
 ---
 
 ## 📂 Gdzie co znaleźć? (Przewodnik po Strukturze)

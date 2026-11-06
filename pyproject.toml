@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "chronos-forecasting>=2.3.2",
+    "dieboldmariano>=1.1.0",
     "gdown>=6.4.2",
     "matplotlib>=3.11.2",
     "neuralforecast>=3.3.0",
