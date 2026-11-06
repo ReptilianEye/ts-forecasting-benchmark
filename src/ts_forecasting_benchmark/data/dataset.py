@@ -12,22 +12,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Literal
+
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
 import torch
+from sklearn.preprocessing import StandardScaler
 from torch.utils.data import Dataset
 
 # Standard benchmark split ratios used in LTSF literature (Autoformer, Informer, PatchTST, DLinear)
 SPLIT_CONFIGS = {
-    "ETTh1": {"train_ratio": 0.6, "val_ratio": 0.2, "test_ratio": 0.2, "freq": "1h"},
-    "ETTh2": {"train_ratio": 0.6, "val_ratio": 0.2, "test_ratio": 0.2, "freq": "1h"},
-    "ETTm1": {"train_ratio": 0.6, "val_ratio": 0.2, "test_ratio": 0.2, "freq": "15min"},
-    "ETTm2": {"train_ratio": 0.6, "val_ratio": 0.2, "test_ratio": 0.2, "freq": "15min"},
-    "Weather": {"train_ratio": 0.7, "val_ratio": 0.1, "test_ratio": 0.2, "freq": "10min"},
-    "Electricity": {"train_ratio": 0.7, "val_ratio": 0.1, "test_ratio": 0.2, "freq": "1h"},
-    "Traffic": {"train_ratio": 0.7, "val_ratio": 0.1, "test_ratio": 0.2, "freq": "1h"},
+    "ETTh1": {"train_ratio": 0.6, "val_ratio": 0.2, "test_ratio": 0.2, "freq": "1h", "season_length": 24},
+    "ETTh2": {"train_ratio": 0.6, "val_ratio": 0.2, "test_ratio": 0.2, "freq": "1h", "season_length": 24},
+    "ETTm1": {"train_ratio": 0.6, "val_ratio": 0.2, "test_ratio": 0.2, "freq": "15min", "season_length": 96},
+    "ETTm2": {"train_ratio": 0.6, "val_ratio": 0.2, "test_ratio": 0.2, "freq": "15min", "season_length": 96},
+    "Weather": {"train_ratio": 0.7, "val_ratio": 0.1, "test_ratio": 0.2, "freq": "10min", "season_length": 144},
+    "Electricity": {"train_ratio": 0.7, "val_ratio": 0.1, "test_ratio": 0.2, "freq": "1h", "season_length": 24},
+    "Traffic": {"train_ratio": 0.7, "val_ratio": 0.1, "test_ratio": 0.2, "freq": "1h", "season_length": 24},
+}
+
+SEASON_LENGTHS = {
+    "1h": 24,
+    "15min": 96,
+    "10min": 144,
 }
 
 
@@ -74,12 +81,12 @@ class TimeSeriesBenchmarkDataset(Dataset):
         df: pd.DataFrame,
         seq_len: int = 96,
         pred_len: int = 96,
-        target_col: Optional[str] = None,
+        target_col: str | None = None,
         split: Literal["train", "val", "test"] = "train",
         train_ratio: float = 0.7,
         val_ratio: float = 0.1,
         scale: bool = True,
-        scaler: Optional[StandardScaler] = None,
+        scaler: StandardScaler | None = None,
     ):
         self.seq_len = seq_len
         self.pred_len = pred_len
@@ -132,7 +139,7 @@ class TimeSeriesBenchmarkDataset(Dataset):
     def __len__(self) -> int:
         return max(0, self.num_samples)
 
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
         s_begin = index
         s_end = s_begin + self.seq_len
         r_begin = s_end
@@ -146,8 +153,8 @@ class TimeSeriesBenchmarkDataset(Dataset):
 
 def to_neuralforecast_df(
     df: pd.DataFrame,
-    date_col: Optional[str] = None,
-    target_col: Optional[str] = None,
+    date_col: str | None = None,
+    target_col: str | None = None,
 ) -> pd.DataFrame:
     """Convert wide multivariate DataFrame into long format (unique_id, ds, y) for NeuralForecast."""
     if date_col is None:
@@ -174,8 +181,8 @@ class LongBenchmarkData:
     test_df: pd.DataFrame
     full_df: pd.DataFrame
     freq: str
-    target_col: Optional[str]
-    scalers: Dict[str, Tuple[float, float]]  # {unique_id: (mean, std)}
+    target_col: str | None
+    scalers: dict[str, tuple[float, float]]  # {unique_id: (mean, std)}
 
     def inverse_transform(self, df: pd.DataFrame, col_name: str = "y") -> pd.DataFrame:
         """Denormalize a column using the training mean and std for each series."""
@@ -189,9 +196,9 @@ class LongBenchmarkData:
 
 def load_long_benchmark(
     dataset_name_or_path: str | Path,
-    target_col: Optional[str] = "OT",
+    target_col: str | None = "OT",
     scale: bool = True,
-    data_dir: Optional[str | Path] = None,
+    data_dir: str | Path | None = None,
 ) -> LongBenchmarkData:
     """Universal long-format loader for StatsForecast, NeuralForecast, and Chronos.
 
@@ -250,8 +257,9 @@ def load_long_benchmark(
     # Load wide dataframe
     wide_df = load_benchmark_dataframe(path)
 
-    # Determine split configuration and frequency
-    cfg = SPLIT_CONFIGS.get(dataset_name, SPLIT_CONFIGS.get(dataset_name.capitalize(), {}))
+    # Determine split configuration and frequency (case-insensitive lookup)
+    cfg_lookup = {k.lower(): v for k, v in SPLIT_CONFIGS.items()}
+    cfg = cfg_lookup.get(dataset_name.lower(), {})
     train_ratio = cfg.get("train_ratio", 0.7)
     val_ratio = cfg.get("val_ratio", 0.1)
     freq = cfg.get("freq", "1h")
@@ -278,7 +286,7 @@ def load_long_benchmark(
     test_df = long_df[test_mask].copy().reset_index(drop=True)
 
     # Standardization per series using train statistics
-    scalers: Dict[str, Tuple[float, float]] = {}
+    scalers: dict[str, tuple[float, float]] = {}
     if scale:
         for uid in long_df["unique_id"].unique():
             tr_series = train_df.loc[train_df["unique_id"] == uid, "y"]
@@ -303,5 +311,105 @@ def load_long_benchmark(
         target_col=target_col,
         scalers=scalers,
     )
+
+
+@dataclass
+class RollingWindow:
+    """Single rolling evaluation window over the test partition."""
+
+    window_idx: int
+    start_offset: int
+    cutoff_ds: pd.Timestamp
+    context_df: pd.DataFrame
+    target_df: pd.DataFrame
+
+
+def generate_rolling_windows(
+    data: LongBenchmarkData,
+    horizon: int,
+    step_size: int | None = None,
+    max_windows: int | None = None,
+    max_context_size: int | None = None,
+) -> list[RollingWindow]:
+    """Generate rolling evaluation windows over the test split of a LongBenchmarkData object.
+
+    Parameters
+    ----------
+    data : LongBenchmarkData
+        Loaded benchmark dataset with train, val, test, and full partitions.
+    horizon : int
+        Forecast horizon length (H).
+    step_size : int, optional
+        Stride between consecutive rolling windows in time steps.
+        Defaults to ``horizon`` (non-overlapping windows).
+    max_windows : int, optional
+        Maximum number of rolling windows to generate. If None or <= 0, all
+        available windows across the test split are returned.
+    max_context_size : int, optional
+        If provided, truncates ``context_df`` to the last ``max_context_size``
+        timestamps before the forecast origin per series.
+
+    Returns
+    -------
+    list[RollingWindow]
+        Ordered list of rolling test windows.
+    """
+    if horizon < 1:
+        raise ValueError(f"horizon must be >= 1, got {horizon}")
+
+    stride = horizon if step_size is None else int(step_size)
+    if stride < 1:
+        raise ValueError(f"step_size must be >= 1, got {stride}")
+
+    # Unique sorted timestamps in full and test splits
+    full_dates = np.sort(data.full_df["ds"].unique())
+    test_dates = np.sort(data.test_df["ds"].unique())
+    n_test = len(test_dates)
+
+    if n_test < horizon:
+        raise ValueError(
+            f"Test split length ({n_test}) is shorter than requested horizon ({horizon})."
+        )
+
+    n_history = len(full_dates) - n_test
+    offsets = list(range(0, n_test - horizon + 1, stride))
+    if max_windows is not None and max_windows > 0:
+        offsets = offsets[:max_windows]
+
+    windows: list[RollingWindow] = []
+    for win_idx, offset in enumerate(offsets):
+        origin_idx = n_history + offset
+        if max_context_size is not None and max_context_size > 0:
+            ctx_start = max(0, origin_idx - max_context_size)
+        else:
+            ctx_start = 0
+
+        ctx_dates = full_dates[ctx_start:origin_idx]
+        tgt_dates = test_dates[offset : offset + horizon]
+
+        context_df = (
+            data.full_df[data.full_df["ds"].isin(ctx_dates)]
+            .sort_values(["unique_id", "ds"])
+            .reset_index(drop=True)
+        )
+        target_df = (
+            data.test_df[data.test_df["ds"].isin(tgt_dates)]
+            .sort_values(["unique_id", "ds"])
+            .reset_index(drop=True)
+        )
+        cutoff_ds = pd.Timestamp(ctx_dates[-1])
+
+        windows.append(
+            RollingWindow(
+                window_idx=win_idx,
+                start_offset=offset,
+                cutoff_ds=cutoff_ds,
+                context_df=context_df,
+                target_df=target_df,
+            )
+        )
+
+    return windows
+
 
 

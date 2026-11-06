@@ -96,6 +96,31 @@ nadpisuje ten plik wynikami wybranych modeli. Pole `params` zawiera argumenty
 konstruktora modelu; przy odtwarzaniu trzeba użyć `loss=MSE(), valid_loss=MSE()`.
 Pilot nadal korzysta ze swoich ustawień — nie wczytuje automatycznie tego pliku.
 
+### Pełny benchmark LTSF (Rolling Window)
+
+Pełny benchmark ewaluuje wszystkie 8 modeli na zbiorach `ETTh1`, `ETTm1`, `Weather`
+oraz `Electricity` dla horyzontów $H \in \{96, 192, 336, 720\}$ przy użyciu okien
+kroczących (`generate_rolling_windows` w `src/ts_forecasting_benchmark/data/dataset.py`)
+oraz dostrojonych hiperparametrów z `configs/best_params.yaml`:
+
+```bash
+# Pełny benchmark (wszystkie 4 zbiory i 4 horyzonty, z opcją wznawiania --resume)
+uv run python scripts/run_full_benchmark.py --resume
+
+# Szybki przebieg na wybranym zbiorze / horyzontach / modelach
+uv run python scripts/run_full_benchmark.py \
+  --datasets ETTh1 Weather \
+  --horizons 96 192 \
+  --models SeasonalNaive N-HiTS DLinear PatchTST Chronos-Bolt \
+  --max-windows 5 \
+  --max-steps 100
+```
+
+Wyniki są zapisywane po każdym `(zbiór, horyzont)` do:
+- `results/metrics/full_benchmark_results.csv` — zagregowane metryki (`MSE`, `MAE`, `RMSE`, `Fit_Time_s`, `Infer_Time_s`, `Time (s)`),
+- `results/metrics/window_metrics.csv` — błędy na poszczególnych oknach testowych (do testów Wilcoxona i Diebolda-Mariano),
+- `results/metrics/residuals/residuals_<Dataset>_H<Horizon>.csv` — surowe predykcje i reszty krok po kroku.
+
 Testy DM, Wilcoxona, Friedmana + Nemenyi i diagram CD są dostępne w module
 `evaluation`. Format danych i przykłady opisano w [docs/STATISTICAL_TESTS.md](docs/STATISTICAL_TESTS.md).
 
