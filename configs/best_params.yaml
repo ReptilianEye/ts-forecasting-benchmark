@@ -1,0 +1,73 @@
+dataset: ETTh1
+target: OT
+horizon: 96
+loss: MSE
+seed: 42
+models:
+  NHITS:
+    validation_mse: 0.09557946082166108
+    params:
+      input_size: 512
+      learning_rate: 0.00014285543420953942
+      batch_size: 32
+      windows_batch_size: 32
+      n_blocks:
+      - 1
+      - 1
+      - 1
+      dropout_prob_theta: 0.17299885984837132
+      h: 96
+      max_steps: 200
+      random_seed: 42
+  DLinear:
+    validation_mse: 0.0830631115402082
+    params:
+      input_size: 192
+      learning_rate: 0.0009988427111118651
+      batch_size: 32
+      windows_batch_size: 32
+      moving_avg_window: 25
+      h: 96
+      max_steps: 200
+      random_seed: 42
+  NBEATS:
+    validation_mse: 0.09305130144458634
+    params:
+      input_size: 336
+      learning_rate: 7.52374288453485e-05
+      batch_size: 128
+      windows_batch_size: 128
+      n_blocks:
+      - 1
+      - 1
+      - 1
+      h: 96
+      max_steps: 200
+      random_seed: 42
+  PatchTST:
+    validation_mse: 0.0785630069393857
+    params:
+      input_size: 192
+      learning_rate: 1.3218305732858278e-05
+      batch_size: 128
+      windows_batch_size: 128
+      encoder_layers: 3
+      hidden_size: 256
+      dropout: 0.22217007277353745
+      h: 96
+      max_steps: 200
+      random_seed: 42
+  iTransformer:
+    validation_mse: 0.08146406788852723
+    params:
+      input_size: 192
+      learning_rate: 2.9380279387035334e-05
+      batch_size: 128
+      windows_batch_size: 128
+      n_series: 1
+      e_layers: 2
+      hidden_size: 256
+      dropout: 0.2497327922401265
+      h: 96
+      max_steps: 200
+      random_seed: 42
