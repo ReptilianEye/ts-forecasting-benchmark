@@ -92,7 +92,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-windows",
         type=int,
-        default=10,
+        default=0,
         help="Maximum rolling windows per (dataset, horizon). Use 0 for all available windows.",
     )
     parser.add_argument(
@@ -250,17 +250,25 @@ def run_statistical_models(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     summaries, win_rows, res_rows = [], [], []
 
-    # 1. SeasonalNaive across rolling windows
+    # 1. SeasonalNaive across rolling windows (batched across all windows)
     if "seasonalnaive" in requested_models:
         t0 = time.time()
-        sn_preds: list[np.ndarray] = []
         ctx_limit = max(season_length * 3, 256)
+        batched_dfs = []
         for win in windows:
-            ctx = win.context_df.tail(ctx_limit)
-            sf = StatsForecast(models=[SeasonalNaive(season_length=season_length)], freq=freq, n_jobs=1)
-            sf.fit(df=ctx)
-            pred_df = sf.predict(h=horizon)
-            sn_preds.append(pred_df["SeasonalNaive"].to_numpy())
+            ctx = win.context_df.tail(ctx_limit).copy()
+            ctx["unique_id"] = f"win_{win.window_idx:04d}"
+            batched_dfs.append(ctx)
+        batched_ctx = pd.concat(batched_dfs, ignore_index=True)
+        sf = StatsForecast(models=[SeasonalNaive(season_length=season_length)], freq=freq, n_jobs=1)
+        sf.fit(df=batched_ctx)
+        pred_df = sf.predict(h=horizon)
+        sn_preds = [
+            pred_df.loc[
+                pred_df["unique_id"] == f"win_{win.window_idx:04d}", "SeasonalNaive"
+            ].to_numpy()
+            for win in windows
+        ]
         sn_time = time.time() - t0
         s_row, w_r, r_r = _evaluate_window_predictions(
             dataset=dataset,
@@ -276,16 +284,16 @@ def run_statistical_models(
         summaries.append(s_row)
         win_rows.extend(w_r)
         res_rows.extend(r_r)
-        print(f"    ✅ {'SeasonalNaive':15s} -> MSE: {s_row['MSE']:.4f} | MAE: {s_row['MAE']:.4f} ({sn_time:.2f}s)")
+        print(
+            f"    ✅ {'SeasonalNaive':15s} -> MSE: {s_row['MSE']:.4f} | MAE: {s_row['MAE']:.4f} ({sn_time:.2f}s)"
+        )
 
-    # 2. AutoARIMA across rolling windows
+    # 2. AutoARIMA across rolling windows (parallelized across windows via StatsForecast)
     if "autoarima" in requested_models:
-        # For sub-hourly series (season_length > 24), cap seasonal period in AutoARIMA
-        # to keep state-space estimation tractable while preserving autoregressive dynamics.
         arima_season = season_length if season_length <= 24 else 1
         arima_ctx_limit = 512
 
-        # Fit on first window context to measure primary parameter estimation time
+        # Fit on first window context to measure single-series parameter estimation time
         t_fit0 = time.time()
         first_ctx = windows[0].context_df.tail(arima_ctx_limit)
         sf_first = StatsForecast(
@@ -309,8 +317,13 @@ def run_statistical_models(
 
         t_inf0 = time.time()
         arima_preds: list[np.ndarray] = [first_pred]
-        for win in windows[1:]:
-            ctx = win.context_df.tail(arima_ctx_limit)
+        if len(windows) > 1:
+            batched_dfs = []
+            for win in windows[1:]:
+                ctx = win.context_df.tail(arima_ctx_limit).copy()
+                ctx["unique_id"] = f"win_{win.window_idx:04d}"
+                batched_dfs.append(ctx)
+            batched_ctx = pd.concat(batched_dfs, ignore_index=True)
             sf = StatsForecast(
                 models=[
                     AutoARIMA(
@@ -324,11 +337,13 @@ def run_statistical_models(
                     )
                 ],
                 freq=freq,
-                n_jobs=1,
+                n_jobs=-1,
             )
-            sf.fit(df=ctx)
+            sf.fit(df=batched_ctx)
             pred_df = sf.predict(h=horizon)
-            arima_preds.append(pred_df["AutoARIMA"].to_numpy())
+            for win in windows[1:]:
+                uid = f"win_{win.window_idx:04d}"
+                arima_preds.append(pred_df.loc[pred_df["unique_id"] == uid, "AutoARIMA"].to_numpy())
         infer_time = time.time() - t_inf0
 
         s_row, w_r, r_r = _evaluate_window_predictions(
@@ -511,7 +526,9 @@ def main() -> None:
             completed_keys.add((str(r["Dataset"]), int(r["Horizon"]), str(r["Model"]).lower()))
         if window_csv.exists():
             window_rows = pd.read_csv(window_csv).to_dict("records")
-        print(f"Resuming benchmark with {len(completed_keys)} completed (dataset, horizon, model) entries.")
+        print(
+            f"Resuming benchmark with {len(completed_keys)} completed (dataset, horizon, model) entries."
+        )
 
     requested_lower = {m.lower() for m in args.models}
 
@@ -520,7 +537,9 @@ def main() -> None:
     print(f"Datasets:    {args.datasets}")
     print(f"Horizons:    {args.horizons}")
     print(f"Models:      {args.models}")
-    print(f"Max Windows: {args.max_windows if args.max_windows > 0 else 'unlimited'} | Step Size: {args.step_size or 'H (non-overlapping)'}")
+    print(
+        f"Max Windows: {args.max_windows if args.max_windows > 0 else 'unlimited'} | Step Size: {args.step_size or 'H (non-overlapping)'}"
+    )
     print(f"Best Params: {args.best_params} (exists={args.best_params.exists()})")
     print(f"Accelerator: {args.accelerator}")
     print("=" * 80)
@@ -545,7 +564,11 @@ def main() -> None:
         print(f"📂 DATASET: {dataset} (Target: {args.target})")
         data = load_long_benchmark(dataset, target_col=args.target, scale=True)
         season_len = _resolve_season_length(dataset, data.freq)
-        train_val_df = pd.concat([data.train_df, data.val_df], ignore_index=True).sort_values("ds").reset_index(drop=True)
+        train_val_df = (
+            pd.concat([data.train_df, data.val_df], ignore_index=True)
+            .sort_values("ds")
+            .reset_index(drop=True)
+        )
         print(
             f"   Train: {len(data.train_df):,} | Val: {len(data.val_df):,} | Test: {len(data.test_df):,} "
             f"| Freq: {data.freq} | Season: {season_len}"
@@ -559,7 +582,9 @@ def main() -> None:
                 step_size=args.step_size,
                 max_windows=max_win,
             )
-            print(f"\n  ⏱️  Horizon H={horizon} | Rolling Windows: K={len(windows)} (stride={args.step_size or horizon})")
+            print(
+                f"\n  ⏱️  Horizon H={horizon} | Rolling Windows: K={len(windows)} (stride={args.step_size or horizon})"
+            )
 
             pending_models = [
                 m for m in args.models if (dataset, horizon, m.lower()) not in completed_keys
