@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LTSF Benchmark Interactive Explorer — Czy mechanizm uwagi jest potrzebny?</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased p-5 md:p-6">
+  <div class="max-w-7xl mx-auto space-y-5">
+
+    <!-- Header Banner -->
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 shadow-sm">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--secondary)] text-[var(--foreground)] text-xs font-medium mb-2">
+            <span>Machine Learning Project 5 • Interactive Documentation & Benchmark Explorer</span>
+          </div>
+          <h1 class="text-2xl font-bold tracking-tight text-[var(--foreground)]">
+            Prognozowanie szeregów czasowych: czy mechanizm uwagi jest potrzebny?
+          </h1>
+          <p class="text-sm text-[var(--muted-foreground)] mt-1">
+            Kompleksowe porównanie 4 paradygmatów (Statistical, Deep MLP/Linear, Attention Transformers, Foundation Zero-Shot) na 4 zbiorach LTSF × 4 horyzontach (656 okien kroczących / 5,248 ewaluacji).
+          </p>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 shrink-0">
+          <div class="bg-[var(--secondary)] border border-[var(--border)] rounded-xl px-3.5 py-2.5 text-center">
+            <div class="text-xs text-[var(--muted-foreground)]">Zadania (Tasks)</div>
+            <div class="text-lg font-bold text-[var(--foreground)]">16 (4×4)</div>
+          </div>
+          <div class="bg-[var(--secondary)] border border-[var(--border)] rounded-xl px-3.5 py-2.5 text-center">
+            <div class="text-xs text-[var(--muted-foreground)]">Okna (Rolling)</div>
+            <div class="text-lg font-bold text-[var(--foreground)]">656 / model</div>
+          </div>
+          <div class="bg-[var(--secondary)] border border-[var(--border)] rounded-xl px-3.5 py-2.5 text-center">
+            <div class="text-xs text-[var(--muted-foreground)]">Friedman p-val</div>
+            <div class="text-lg font-bold text-emerald-500">8.1e-7</div>
+          </div>
+          <div class="bg-[var(--secondary)] border border-[var(--border)] rounded-xl px-3.5 py-2.5 text-center">
+            <div class="text-xs text-[var(--muted-foreground)]">Lider Pareto</div>
+            <div class="text-lg font-bold text-purple-500">Chronos / N-HiTS</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="flex flex-wrap gap-2 mt-5 pt-4 border-t border-[var(--border)]" id="nav-tabs">
+        <button onclick="switchTab('overview')" id="tab-btn-overview" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-[var(--primary)] text-[var(--primary-foreground)]">
+          1. Przegląd i Architektura (Pipeline)
+        </button>
+        <button onclick="switchTab('pareto')" id="tab-btn-pareto" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-[var(--secondary)] text-[var(--foreground)]">
+          2. Front Pareto (Accuracy vs Time)
+        </button>
+        <button onclick="switchTab('stats')" id="tab-btn-stats" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-[var(--secondary)] text-[var(--foreground)]">
+          3. Testy Statystyczne & Diagram CD
+        </button>
+        <button onclick="switchTab('forecasts')" id="tab-btn-forecasts" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-[var(--secondary)] text-[var(--foreground)]">
+          4. Wizualizacja Prognoz (Forecasts)
+        </button>
+        <button onclick="switchTab('table')" id="tab-btn-table" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-[var(--secondary)] text-[var(--foreground)]">
+          5. Pełna Tabela Wyników (128 Runów)
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB 1: OVERVIEW & ARCHITECTURE -->
+    <div id="tab-overview" class="tab-panel space-y-5">
+      <!-- Executive Verdict Card -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm">
+        <h2 class="text-lg font-bold text-[var(--foreground)] mb-2">
+          🎯 Główny Wniosek Badawczy (Executive Answer: Is Attention Needed?)
+        </h2>
+        <p class="text-sm text-[var(--muted-foreground)] leading-relaxed">
+          <strong>Nie — mechanizm Self-Attention nie jest bezwzględnie konieczny, aby osiągnąć wyniki SOTA w prognozowaniu szeregów czasowych (LTSF).</strong>
+          Chociaż <code>PatchTST</code> uzyskuje najniższą średnią rangę MSE (<strong>3.125</strong> na 16 zadaniach), test post-hoc <strong>Friedmana + Nemenyi (α = 0.05)</strong> wykazuje, że różnica względem hierarchicznych sieci MLP bez uwagi (<code>N-HiTS</code>: ranga <strong>3.375</strong>, <code>N-BEATS</code>: <strong>3.688</strong>), dekompozycji liniowej (<code>DLinear</code>: <strong>4.250</strong>) oraz modelu fundacyjnego Zero-Shot (<code>Chronos-Bolt</code>: <strong>3.625</strong> MSE / <strong>#1 ranga 2.938 w MAE!</strong>) jest <strong>nieistotna statystycznie</strong>. Co kluczowe, <code>N-HiTS</code> i <code>DLinear</code> trenują się <strong>2×–3.3× szybciej</strong> niż <code>PatchTST</code>, a <code>Chronos-Bolt</code> nie wymaga żadnego treningu (<code>0.0s fit time</code>), dominując na Froncie Pareto.
+        </p>
+      </div>
+
+      <!-- 4 Model Paradigms Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold px-2.5 py-1 rounded bg-slate-500/15 text-slate-400">1. Statistical (StatsForecast)</span>
+            <span class="text-xs text-[var(--muted-foreground)]">CPU Baseline</span>
+          </div>
+          <h3 class="font-bold text-base mb-1">SeasonalNaive & AutoARIMA</h3>
+          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+            Klasyczne modele autoregresyjne i sezonowe z dopasowanym okresem sezonowości (<code>24</code> dla 1h, <code>96</code> dla 15min, <code>144</code> dla 10min). Służą jako punkt odniesienia (średnia ranga MSE: <strong>6.81</strong>).
+          </p>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-400">2. MLP / Linear (Bez Uwagi)</span>
+            <span class="text-xs text-[var(--muted-foreground)]">Fastest DL</span>
+          </div>
+          <h3 class="font-bold text-base mb-1">N-HiTS, N-BEATS, DLinear</h3>
+          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+            Architektury oparte o dekompozycję trendu/sezonowości (<code>DLinear</code>) i wieloskalową interpolację rezydualną (<code>N-HiTS</code>). <code>N-HiTS</code> osiąga 2. miejsce w rankingu MSE (<strong>3.375</strong>) przy czasie ~3.3s.
+          </p>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold px-2.5 py-1 rounded bg-rose-500/15 text-rose-400">3. Attention (Transformers)</span>
+            <span class="text-xs text-[var(--muted-foreground)]">Heavy Compute</span>
+          </div>
+          <h3 class="font-bold text-base mb-1">PatchTST & iTransformer</h3>
+          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+            <code>PatchTST</code> dzieli szereg na sub-serie (patche), a <code>iTransformer</code> aplikuje uwagę wzdłuż zmiennych. Wysoka dokładność (ranga <strong>3.125</strong> dla PatchTST), ale najwyższy koszt obliczeniowy (~5.8s/zadanie).
+          </p>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold px-2.5 py-1 rounded bg-purple-500/15 text-purple-400">4. Foundation (Zero-Shot)</span>
+            <span class="text-xs text-[var(--muted-foreground)]">0s Training</span>
+          </div>
+          <h3 class="font-bold text-base mb-1">Chronos-Bolt (Amazon)</h3>
+          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+            Pre-trenowany model T5-based działający w trybie <strong>Zero-Shot</strong> (brak uczenia na zbiorze docelowym). Osiąga <strong>#1 średnie MSE (0.1289)</strong>, <strong>#1 rangę MAE (2.938)</strong> i predykcję w ~0.67s!
+          </p>
+        </div>
+      </div>
+
+      <!-- Methodology & Optuna Hyperparameters Row -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm">
+          <h3 class="font-bold text-base mb-3">🔄 Metodologia: Rolling Window Evaluation (Issue #4)</h3>
+          <div class="space-y-2.5 text-xs text-[var(--muted-foreground)] leading-relaxed">
+            <p>
+              W przeciwieństwie do pojedynczego okna w pilocie, pełny benchmark stosuje procedurę <strong>Train Once, Roll Inference</strong> na całym zbiorze testowym (20% danych każdego szeregu):
+            </p>
+            <ul class="list-disc pl-5 space-y-1.5">
+              <li><strong>Standaryzacja bez wycieku (Zero Data Leakage):</strong> <code>StandardScaler</code> dopasowany wyłącznie na podzbiorze treningowym (<code>load_long_benchmark</code>).</li>
+              <li><strong>Niepokrywające się okna (Non-overlapping windows, stride = H):</strong> Gwarantują niezależność prób błędów wymaganą przez nieparametryczny test <strong>Wilcoxona</strong> oraz poprawny szereg czasowy strat dla testu <strong>Diebolda-Mariano</strong>.</li>
+              <li><strong>Rozkład 656 okien testowych na model:</strong>
+                <code>ETTh1</code> (36/18/10/4), <code>ETTm1</code> (145/72/41/19), <code>Weather</code> (109/54/31/14), <code>Electricity</code> (54/27/15/7) dla <code>H ∈ {96, 192, 336, 720}</code>.
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm">
+          <h3 class="font-bold text-base mb-3">🎛️ Dostrojone Hiperparametry Optuna (configs/best_params.yaml)</h3>
+          <p class="text-xs text-[var(--muted-foreground)] mb-3">
+            Wynik optymalizacji bayesowskiej (<code>TPESampler</code> + <code>MedianPruner</code>, Issue #3) na zbiorze walidacyjnym:
+          </p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs text-left border-collapse">
+              <thead>
+                <tr class="border-b border-[var(--border)] text-[var(--muted-foreground)]">
+                  <th class="py-1.5 pr-2">Model</th>
+                  <th class="py-1.5 px-2">Lookback (L)</th>
+                  <th class="py-1.5 px-2">Learning Rate</th>
+                  <th class="py-1.5 px-2">Batch</th>
+                  <th class="py-1.5 pl-2">Architektura</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[var(--border)]">
+                <tr>
+                  <td class="py-1.5 pr-2 font-semibold">PatchTST</td>
+                  <td class="py-1.5 px-2">192</td>
+                  <td class="py-1.5 px-2">1.32e-5</td>
+                  <td class="py-1.5 px-2">128</td>
+                  <td class="py-1.5 pl-2">layers=3, hidden=256, drop=0.22</td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 pr-2 font-semibold">iTransformer</td>
+                  <td class="py-1.5 px-2">192</td>
+                  <td class="py-1.5 px-2">2.94e-5</td>
+                  <td class="py-1.5 px-2">128</td>
+                  <td class="py-1.5 pl-2">e_layers=2, hidden=256, drop=0.25</td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 pr-2 font-semibold">DLinear</td>
+                  <td class="py-1.5 px-2">192</td>
+                  <td class="py-1.5 px-2">9.99e-4</td>
+                  <td class="py-1.5 px-2">32</td>
+                  <td class="py-1.5 pl-2">moving_avg_window=25</td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 pr-2 font-semibold">N-BEATS</td>
+                  <td class="py-1.5 px-2">336</td>
+                  <td class="py-1.5 px-2">7.52e-5</td>
+                  <td class="py-1.5 px-2">128</td>
+                  <td class="py-1.5 pl-2">n_blocks=[1, 1, 1]</td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 pr-2 font-semibold">N-HiTS</td>
+                  <td class="py-1.5 px-2">512</td>
+                  <td class="py-1.5 px-2">1.43e-4</td>
+                  <td class="py-1.5 px-2">32</td>
+                  <td class="py-1.5 pl-2">n_blocks=[1, 1, 1], drop=0.17</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: PARETO FRONT EXPLORER -->
+    <div id="tab-pareto" class="tab-panel hidden space-y-5">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <div>
+            <h2 class="text-lg font-bold">⚡ Interaktywny Front Pareto (Dokładność vs Koszt Obliczeniowy)</h2>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              Modele leżące na przerywanej linii (Pareto Frontier) są niezdominowane — żaden inny model nie jest jednocześnie szybszy i dokładniejszy.
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <select id="pareto-scope" onchange="renderPareto()" class="bg-[var(--secondary)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs font-medium">
+              <option value="ALL_RANK">Wszystkie 16 zadań (Średnia ranga Friedmana)</option>
+              <option value="ALL_NORM">Wszystkie 16 zadań (Średnie MSE / MAE)</option>
+              <option value="ETTh1_96">ETTh1 (H=96)</option>
+              <option value="ETTh1_720">ETTh1 (H=720)</option>
+              <option value="ETTm1_96">ETTm1 (H=96)</option>
+              <option value="ETTm1_720">ETTm1 (H=720)</option>
+              <option value="Weather_96">Weather (H=96)</option>
+              <option value="Weather_720">Weather (H=720)</option>
+              <option value="Electricity_96">Electricity (H=96)</option>
+              <option value="Electricity_720">Electricity (H=720)</option>
+            </select>
+            <select id="pareto-metric" onchange="renderPareto()" class="bg-[var(--secondary)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs font-medium">
+              <option value="MSE">Metryka błędu: MSE</option>
+              <option value="MAE">Metryka błędu: MAE</option>
+            </select>
+            <select id="pareto-time" onchange="renderPareto()" class="bg-[var(--secondary)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs font-medium">
+              <option value="Time (s)">Czas: Całkowity (Fit + Infer)</option>
+              <option value="Fit_Time_s">Czas: Tylko Trening (Fit Time)</option>
+              <option value="Infer_Time_s">Czas: Tylko Inferencja (Rolling Infer)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="w-full overflow-x-auto">
+          <canvas id="pareto-canvas" width="980" height="400" class="w-full rounded-xl border border-[var(--border)] bg-[var(--secondary)]"></canvas>
+        </div>
+
+        <div id="pareto-cards" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 mt-4"></div>
+      </div>
+    </div>
+
+    <!-- TAB 3: STATISTICAL TESTS & CD DIAGRAM -->
+    <div id="tab-stats" class="tab-panel hidden space-y-5">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <div>
+            <h2 class="text-lg font-bold">📐 Diagram Critical Difference (Friedman + post-hoc Nemenyi)</h2>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              Modele połączone grubą poziomą belką (clique) <strong>nie różnią się istotnie statystycznie</strong> na poziomie α = 0.05 (CD = 2.625 dla K=8 modeli i N=16 zadań).
+            </p>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="setStatsMetric('MSE')" id="stats-btn-mse" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)]">
+              Ranking wg MSE
+            </button>
+            <button onclick="setStatsMetric('MAE')" id="stats-btn-mae" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[var(--secondary)] text-[var(--foreground)]">
+              Ranking wg MAE
+            </button>
+          </div>
+        </div>
+
+        <canvas id="cd-canvas" width="980" height="230" class="w-full rounded-xl border border-[var(--border)] bg-[var(--secondary)]"></canvas>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold text-base">Macierz Parzystych Porównań (Pairwise Matrix)</h3>
+            <select id="matrix-mode" onchange="renderStatsMatrix()" class="bg-[var(--secondary)] border border-[var(--border)] rounded-lg px-2.5 py-1 text-xs font-medium">
+              <option value="nemenyi">Post-hoc Nemenyi p-values (16 zadań)</option>
+              <option value="wilcoxon">Wilcoxon Signed-Rank p-values (656 okien)</option>
+              <option value="winrate">Odsetek wygranych okien (Win-Rate % na 656 oknach)</option>
+            </select>
+          </div>
+          <div id="pairwise-matrix-container" class="overflow-x-auto"></div>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold text-base">Test Diebolda-Mariano i Wilcoxona (H=96)</h3>
+            <select id="dm-dataset" onchange="renderDMTable()" class="bg-[var(--secondary)] border border-[var(--border)] rounded-lg px-2.5 py-1 text-xs font-medium">
+              <option value="ETTh1">Zbiór: ETTh1 (36 okien)</option>
+              <option value="ETTm1">Zbiór: ETTm1 (145 okien)</option>
+              <option value="Weather">Zbiór: Weather (109 okien)</option>
+              <option value="Electricity">Zbiór: Electricity (54 okna)</option>
+            </select>
+          </div>
+          <p class="text-xs text-[var(--muted-foreground)] mb-3">
+            Ujemna statystyka DM oznacza mniejszy błąd pierwszego modelu w parze. <code>p &lt; 0.05</code> (zielony) oznacza różnicę istotną statystycznie:
+          </p>
+          <div id="dm-table-container" class="overflow-x-auto"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: FORECAST VISUALIZER -->
+    <div id="tab-forecasts" class="tab-panel hidden space-y-5">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <div>
+            <h2 class="text-lg font-bold">📈 Porównanie Prognoz na Oknie Testowym (H=96, z-score)</h2>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              Wybierz zbiór danych oraz kliknij nazwy modeli poniżej, aby włączyć/wyłączyć ich krzywe predykcji względem wartości rzeczywistej (Ground Truth).
+            </p>
+          </div>
+          <select id="fc-dataset" onchange="renderForecastChart()" class="bg-[var(--secondary)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs font-medium">
+            <option value="ETTh1">Zbiór: ETTh1 (Hourly Oil Temperature)</option>
+            <option value="ETTm1">Zbiór: ETTm1 (15-min Oil Temperature)</option>
+            <option value="Weather">Zbiór: Weather (10-min CO2 / OT)</option>
+            <option value="Electricity">Zbiór: Electricity (Hourly Load)</option>
+          </select>
+        </div>
+
+        <div id="fc-model-toggles" class="flex flex-wrap gap-2 mb-4"></div>
+
+        <canvas id="fc-canvas" width="980" height="370" class="w-full rounded-xl border border-[var(--border)] bg-[var(--secondary)]"></canvas>
+
+        <!-- Horizon Degradation Chart -->
+        <div class="mt-6 pt-5 border-t border-[var(--border)]">
+          <h3 class="font-bold text-base mb-1">Degradacja Błędu wraz z Horyzontem Prognozy (H ∈ {96, 192, 336, 720})</h3>
+          <p class="text-xs text-[var(--muted-foreground)] mb-3">
+            Jak szybko rośnie błąd MSE dla wybranego zbioru danych, gdy wydłużamy horyzont z 96 do 720 kroków:
+          </p>
+          <canvas id="horizon-canvas" width="980" height="290" class="w-full rounded-xl border border-[var(--border)] bg-[var(--secondary)]"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: FULL BENCHMARK TABLE -->
+    <div id="tab-table" class="tab-panel hidden space-y-5">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-lg font-bold">📋 Pełna Tabela Wyników Benchmarku (128 konfiguracji)</h2>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              Najlepszy wynik MSE w ramach każdego (Zbioru, Horyzontu) oznaczono gwiazdką ⭐.
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <select id="tbl-dataset" onchange="renderFullTable()" class="bg-[var(--secondary)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs font-medium">
+              <option value="ALL">Wszystkie zbiory (4)</option>
+              <option value="ETTh1">ETTh1</option>
+              <option value="ETTm1">ETTm1</option>
+              <option value="Weather">Weather</option>
+              <option value="Electricity">Electricity</option>
+            </select>
+            <select id="tbl-horizon" onchange="renderFullTable()" class="bg-[var(--secondary)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs font-medium">
+              <option value="ALL">Wszystkie horyzonty</option>
+              <option value="96">H = 96</option>
+              <option value="192">H = 192</option>
+              <option value="336">H = 336</option>
+              <option value="720">H = 720</option>
+            </select>
+            <select id="tbl-paradigm" onchange="renderFullTable()" class="bg-[var(--secondary)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs font-medium">
+              <option value="ALL">Wszystkie paradygmaty</option>
+              <option value="Deep Learning (Attention)">Attention (PatchTST, iTransformer)</option>
+              <option value="Deep Learning (MLP / Linear)">MLP / Linear (N-HiTS, N-BEATS, DLinear)</option>
+              <option value="Foundation Model (LLM)">Foundation Zero-Shot (Chronos-Bolt)</option>
+              <option value="Statistical">Statistical (SeasonalNaive, AutoARIMA)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto max-h-[540px] overflow-y-auto border border-[var(--border)] rounded-xl">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead class="bg-[var(--secondary)] sticky top-0 z-10 border-b border-[var(--border)]">
+              <tr>
+                <th class="py-2.5 px-3">Zbiór</th>
+                <th class="py-2.5 px-3">H</th>
+                <th class="py-2.5 px-3">Okna (K)</th>
+                <th class="py-2.5 px-3">Model</th>
+                <th class="py-2.5 px-3">Paradygmat</th>
+                <th class="py-2.5 px-3 text-right">MSE ± Std</th>
+                <th class="py-2.5 px-3 text-right">MAE</th>
+                <th class="py-2.5 px-3 text-right">RMSE</th>
+                <th class="py-2.5 px-3 text-right">Fit (s)</th>
+                <th class="py-2.5 px-3 text-right">Infer (s)</th>
+                <th class="py-2.5 px-3 text-right">Total (s)</th>
+              </tr>
+            </thead>
+            <tbody id="full-table-body" class="divide-y divide-[var(--border)]"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const DATA = {"summary_rows": [{"Dataset": "ETTh1", "Horizon": 96, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 36, "MSE": 0.1374438102799458, "MAE": 0.2732634013301624, "RMSE": 0.3707341504096241, "MSE_Std": 0.1561737355093659, "MAE_Std": 0.1591442999862019, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "ETTh1_H96"}, {"Dataset": "ETTh1", "Horizon": 96, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 36, "MSE": 0.1556133380061174, "MAE": 0.2943815399923821, "RMSE": 0.3944785646979027, "MSE_Std": 0.1725742222228699, "MAE_Std": 0.1656890343254858, "Fit_Time_s": 0.507, "Infer_Time_s": 2.88, "Time (s)": 3.387, "Task": "ETTh1_H96"}, {"Dataset": "ETTh1", "Horizon": 96, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 36, "MSE": 0.1029408294386576, "MAE": 0.2462385519474723, "RMSE": 0.3208439331492145, "MSE_Std": 0.0953221360151791, "MAE_Std": 0.1163226004722805, "Fit_Time_s": 4.052, "Infer_Time_s": 0.278, "Time (s)": 4.33, "Task": "ETTh1_H96"}, {"Dataset": "ETTh1", "Horizon": 96, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 36, "MSE": 0.0923364676694148, "MAE": 0.2320657423334977, "RMSE": 0.303869162090224, "MSE_Std": 0.0905250188198797, "MAE_Std": 0.1068527900387178, "Fit_Time_s": 1.271, "Infer_Time_s": 0.154, "Time (s)": 1.426, "Task": "ETTh1_H96"}, {"Dataset": "ETTh1", "Horizon": 96, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 36, "MSE": 0.0955576693815051, "MAE": 0.2403188000596356, "RMSE": 0.3091240355933279, "MSE_Std": 0.0911291529729926, "MAE_Std": 0.1057988929141206, "Fit_Time_s": 2.589, "Infer_Time_s": 0.122, "Time (s)": 2.712, "Task": "ETTh1_H96"}, {"Dataset": "ETTh1", "Horizon": 96, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 36, "MSE": 0.0905569043533991, "MAE": 0.2281716477208398, "RMSE": 0.3009267425028875, "MSE_Std": 0.0902023848880199, "MAE_Std": 0.1070341744447518, "Fit_Time_s": 7.994, "Infer_Time_s": 0.327, "Time (s)": 8.321, "Task": "ETTh1_H96"}, {"Dataset": "ETTh1", "Horizon": 96, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 36, "MSE": 0.0907642206252973, "MAE": 0.2271854473373089, "RMSE": 0.3012710086040429, "MSE_Std": 0.0961315553317933, "MAE_Std": 0.1109525038766514, "Fit_Time_s": 4.801, "Infer_Time_s": 0.77, "Time (s)": 5.572, "Task": "ETTh1_H96"}, {"Dataset": "ETTh1", "Horizon": 96, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 36, "MSE": 0.1043007170111896, "MAE": 0.2370734428356845, "RMSE": 0.3229562153159304, "MSE_Std": 0.1093373106039416, "MAE_Std": 0.1300371101128002, "Fit_Time_s": 0.0, "Infer_Time_s": 1.743, "Time (s)": 1.743, "Task": "ETTh1_H96"}, {"Dataset": "ETTh1", "Horizon": 192, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 18, "MSE": 0.2263003487234733, "MAE": 0.3610787387165508, "RMSE": 0.4757103622199892, "MSE_Std": 0.2174637386351955, "MAE_Std": 0.2084310040682992, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "ETTh1_H192"}, {"Dataset": "ETTh1", "Horizon": 192, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 18, "MSE": 0.2463872533348002, "MAE": 0.3697513005321439, "RMSE": 0.4963741062291628, "MSE_Std": 0.3004123796016488, "MAE_Std": 0.240571313684505, "Fit_Time_s": 0.374, "Infer_Time_s": 1.44, "Time (s)": 1.814, "Task": "ETTh1_H192"}, {"Dataset": "ETTh1", "Horizon": 192, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 18, "MSE": 0.1375110327211196, "MAE": 0.2977260705238682, "RMSE": 0.3708248005745025, "MSE_Std": 0.0870292154940386, "MAE_Std": 0.1183738383508512, "Fit_Time_s": 6.775, "Infer_Time_s": 0.252, "Time (s)": 7.028, "Task": "ETTh1_H192"}, {"Dataset": "ETTh1", "Horizon": 192, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 18, "MSE": 0.107860942883434, "MAE": 0.2502252568373975, "RMSE": 0.3284218976917253, "MSE_Std": 0.0847812775308411, "MAE_Std": 0.1085381880640133, "Fit_Time_s": 3.199, "Infer_Time_s": 0.049, "Time (s)": 3.248, "Task": "ETTh1_H192"}, {"Dataset": "ETTh1", "Horizon": 192, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 18, "MSE": 0.1126956855631445, "MAE": 0.26742626232167, "RMSE": 0.3357017806970117, "MSE_Std": 0.0713251472292325, "MAE_Std": 0.0960235854657063, "Fit_Time_s": 3.8, "Infer_Time_s": 0.074, "Time (s)": 3.875, "Task": "ETTh1_H192"}, {"Dataset": "ETTh1", "Horizon": 192, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 18, "MSE": 0.1139805671759919, "MAE": 0.2607837788963087, "RMSE": 0.3376100815674674, "MSE_Std": 0.0919981867789081, "MAE_Std": 0.1094053056542719, "Fit_Time_s": 7.372, "Infer_Time_s": 0.219, "Time (s)": 7.59, "Task": "ETTh1_H192"}, {"Dataset": "ETTh1", "Horizon": 192, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 18, "MSE": 0.1143403400590122, "MAE": 0.2603470424189946, "RMSE": 0.338142484847752, "MSE_Std": 0.0908284714290191, "MAE_Std": 0.113142720603557, "Fit_Time_s": 3.227, "Infer_Time_s": 0.375, "Time (s)": 3.602, "Task": "ETTh1_H192"}, {"Dataset": "ETTh1", "Horizon": 192, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 18, "MSE": 0.1509919385971023, "MAE": 0.2927891874234823, "RMSE": 0.3885768117079329, "MSE_Std": 0.1433972254003134, "MAE_Std": 0.1506874025229654, "Fit_Time_s": 0.0, "Infer_Time_s": 0.415, "Time (s)": 0.415, "Task": "ETTh1_H192"}, {"Dataset": "ETTh1", "Horizon": 336, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 10, "MSE": 0.129641007902435, "MAE": 0.2742970909444239, "RMSE": 0.3600569509153171, "MSE_Std": 0.0815077992726086, "MAE_Std": 0.093358752208711, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "ETTh1_H336"}, {"Dataset": "ETTh1", "Horizon": 336, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 10, "MSE": 0.1494088075869713, "MAE": 0.3015599803861764, "RMSE": 0.3865343549892704, "MSE_Std": 0.0925402096451011, "MAE_Std": 0.1005961570985775, "Fit_Time_s": 0.276, "Infer_Time_s": 0.8, "Time (s)": 1.076, "Task": "ETTh1_H336"}, {"Dataset": "ETTh1", "Horizon": 336, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 10, "MSE": 0.1226731158914962, "MAE": 0.2731768164538221, "RMSE": 0.3502472211046024, "MSE_Std": 0.0767481591211454, "MAE_Std": 0.098401226272646, "Fit_Time_s": 2.548, "Infer_Time_s": 0.038, "Time (s)": 2.586, "Task": "ETTh1_H336"}, {"Dataset": "ETTh1", "Horizon": 336, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 10, "MSE": 0.116453299748657, "MAE": 0.2700021874544389, "RMSE": 0.3412525454097845, "MSE_Std": 0.0562881867932132, "MAE_Std": 0.0661006867828056, "Fit_Time_s": 1.141, "Infer_Time_s": 0.024, "Time (s)": 1.164, "Task": "ETTh1_H336"}, {"Dataset": "ETTh1", "Horizon": 336, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 10, "MSE": 0.1405263339963389, "MAE": 0.2901045510959648, "RMSE": 0.3748684222448443, "MSE_Std": 0.1030205762719641, "MAE_Std": 0.1098241281627646, "Fit_Time_s": 2.518, "Infer_Time_s": 0.056, "Time (s)": 2.573, "Task": "ETTh1_H336"}, {"Dataset": "ETTh1", "Horizon": 336, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 10, "MSE": 0.1152925655695246, "MAE": 0.2639610045071062, "RMSE": 0.3395475895504555, "MSE_Std": 0.067719522557273, "MAE_Std": 0.0815039173517982, "Fit_Time_s": 4.679, "Infer_Time_s": 0.149, "Time (s)": 4.829, "Task": "ETTh1_H336"}, {"Dataset": "ETTh1", "Horizon": 336, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 10, "MSE": 0.1207823383126091, "MAE": 0.2752289006131937, "RMSE": 0.3475375351132725, "MSE_Std": 0.0622750501448734, "MAE_Std": 0.0788939125687758, "Fit_Time_s": 2.935, "Infer_Time_s": 0.232, "Time (s)": 3.167, "Task": "ETTh1_H336"}, {"Dataset": "ETTh1", "Horizon": 336, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 10, "MSE": 0.1266125906338127, "MAE": 0.2686188611722724, "RMSE": 0.3558266300234044, "MSE_Std": 0.0988408615051125, "MAE_Std": 0.0992408622037926, "Fit_Time_s": 0.0, "Infer_Time_s": 0.601, "Time (s)": 0.601, "Task": "ETTh1_H336"}, {"Dataset": "ETTh1", "Horizon": 720, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 4, "MSE": 0.1642364000829498, "MAE": 0.3133476341108787, "RMSE": 0.4052609037187646, "MSE_Std": 0.0840976157205847, "MAE_Std": 0.0911000414251736, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "ETTh1_H720"}, {"Dataset": "ETTh1", "Horizon": 720, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 4, "MSE": 0.1378231520951785, "MAE": 0.2856408400148786, "RMSE": 0.3712454068337796, "MSE_Std": 0.0939744442768616, "MAE_Std": 0.1080970254857678, "Fit_Time_s": 0.213, "Infer_Time_s": 0.32, "Time (s)": 0.533, "Task": "ETTh1_H720"}, {"Dataset": "ETTh1", "Horizon": 720, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 4, "MSE": 0.1587431976695505, "MAE": 0.3266544284182698, "RMSE": 0.3984258998478269, "MSE_Std": 0.0370723495958896, "MAE_Std": 0.0527470881431307, "Fit_Time_s": 3.331, "Infer_Time_s": 0.078, "Time (s)": 3.409, "Task": "ETTh1_H720"}, {"Dataset": "ETTh1", "Horizon": 720, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 4, "MSE": 0.1502724035898854, "MAE": 0.3116139813833882, "RMSE": 0.3876498466269339, "MSE_Std": 0.036117108127577, "MAE_Std": 0.0425071124773164, "Fit_Time_s": 2.019, "Infer_Time_s": 0.029, "Time (s)": 2.048, "Task": "ETTh1_H720"}, {"Dataset": "ETTh1", "Horizon": 720, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 4, "MSE": 0.1310714934783744, "MAE": 0.2863941003916479, "RMSE": 0.3620379724260625, "MSE_Std": 0.0547163368380124, "MAE_Std": 0.0657473668681406, "Fit_Time_s": 2.514, "Infer_Time_s": 0.15, "Time (s)": 2.665, "Task": "ETTh1_H720"}, {"Dataset": "ETTh1", "Horizon": 720, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 4, "MSE": 0.1590436335048403, "MAE": 0.3261242368503755, "RMSE": 0.3988027501219624, "MSE_Std": 0.0505504249319626, "MAE_Std": 0.0544683199932487, "Fit_Time_s": 5.148, "Infer_Time_s": 0.226, "Time (s)": 5.374, "Task": "ETTh1_H720"}, {"Dataset": "ETTh1", "Horizon": 720, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 4, "MSE": 0.1833955890377615, "MAE": 0.3509191593233274, "RMSE": 0.4282471121184141, "MSE_Std": 0.0757331101528479, "MAE_Std": 0.0780379752190947, "Fit_Time_s": 8.162, "Infer_Time_s": 0.849, "Time (s)": 9.011, "Task": "ETTh1_H720"}, {"Dataset": "ETTh1", "Horizon": 720, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 4, "MSE": 0.1366620920921463, "MAE": 0.2896696204720198, "RMSE": 0.3696783630294669, "MSE_Std": 0.0878767882316783, "MAE_Std": 0.1046227449567515, "Fit_Time_s": 0.0, "Infer_Time_s": 1.671, "Time (s)": 1.671, "Task": "ETTh1_H720"}, {"Dataset": "ETTm1", "Horizon": 96, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 145, "MSE": 0.0697536712668814, "MAE": 0.2021868103410664, "RMSE": 0.2641092032983353, "MSE_Std": 0.0853541459014069, "MAE_Std": 0.1135598172360619, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "ETTm1_H96"}, {"Dataset": "ETTm1", "Horizon": 96, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 145, "MSE": 0.0806305995209493, "MAE": 0.2108794681073991, "RMSE": 0.2839552773254079, "MSE_Std": 0.1173513567356229, "MAE_Std": 0.1408395940977589, "Fit_Time_s": 0.067, "Infer_Time_s": 11.6, "Time (s)": 11.667, "Task": "ETTm1_H96"}, {"Dataset": "ETTm1", "Horizon": 96, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 145, "MSE": 0.0473243514504226, "MAE": 0.1586380236931982, "RMSE": 0.217541608549773, "MSE_Std": 0.0709439699841679, "MAE_Std": 0.1011250979646505, "Fit_Time_s": 3.352, "Infer_Time_s": 0.102, "Time (s)": 3.454, "Task": "ETTm1_H96"}, {"Dataset": "ETTm1", "Horizon": 96, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 145, "MSE": 0.0502934156762665, "MAE": 0.1588439621953489, "RMSE": 0.2242619354154123, "MSE_Std": 0.083586335069238, "MAE_Std": 0.1062706689928972, "Fit_Time_s": 2.123, "Infer_Time_s": 0.085, "Time (s)": 2.209, "Task": "ETTm1_H96"}, {"Dataset": "ETTm1", "Horizon": 96, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 145, "MSE": 0.0488243195303889, "MAE": 0.1583953883937831, "RMSE": 0.2209622581582405, "MSE_Std": 0.0819692614557839, "MAE_Std": 0.1070707031651873, "Fit_Time_s": 3.068, "Infer_Time_s": 0.067, "Time (s)": 3.134, "Task": "ETTm1_H96"}, {"Dataset": "ETTm1", "Horizon": 96, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 145, "MSE": 0.0450315222042282, "MAE": 0.147816180063153, "RMSE": 0.2122063198970007, "MSE_Std": 0.0837941814489482, "MAE_Std": 0.1050200370988129, "Fit_Time_s": 7.131, "Infer_Time_s": 0.602, "Time (s)": 7.733, "Task": "ETTm1_H96"}, {"Dataset": "ETTm1", "Horizon": 96, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 145, "MSE": 0.0454238219796159, "MAE": 0.1476062097068362, "RMSE": 0.2131286512405499, "MSE_Std": 0.0843526700676202, "MAE_Std": 0.1090531490017368, "Fit_Time_s": 5.266, "Infer_Time_s": 6.402, "Time (s)": 11.668, "Task": "ETTm1_H96"}, {"Dataset": "ETTm1", "Horizon": 96, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 145, "MSE": 0.0605347882862588, "MAE": 0.1727808207035169, "RMSE": 0.2460381846101512, "MSE_Std": 0.0947140390990528, "MAE_Std": 0.1293865092457279, "Fit_Time_s": 0.0, "Infer_Time_s": 1.06, "Time (s)": 1.06, "Task": "ETTm1_H96"}, {"Dataset": "ETTm1", "Horizon": 192, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 72, "MSE": 0.0988182609867563, "MAE": 0.2434805359014331, "RMSE": 0.3143537195370151, "MSE_Std": 0.1123336799505098, "MAE_Std": 0.1333572611849334, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "ETTm1_H192"}, {"Dataset": "ETTm1", "Horizon": 192, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 72, "MSE": 0.1134171026475312, "MAE": 0.2592524419923198, "RMSE": 0.3367745576012701, "MSE_Std": 0.1316252591526219, "MAE_Std": 0.1529064464024616, "Fit_Time_s": 0.053, "Infer_Time_s": 5.76, "Time (s)": 5.813, "Task": "ETTm1_H192"}, {"Dataset": "ETTm1", "Horizon": 192, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 72, "MSE": 0.0755475480855063, "MAE": 0.2090976030188654, "RMSE": 0.2748591422629167, "MSE_Std": 0.0879286348575701, "MAE_Std": 0.120518962056549, "Fit_Time_s": 3.892, "Infer_Time_s": 0.093, "Time (s)": 3.985, "Task": "ETTm1_H192"}, {"Dataset": "ETTm1", "Horizon": 192, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 72, "MSE": 0.0788236428411041, "MAE": 0.2091062148804403, "RMSE": 0.2807554858611032, "MSE_Std": 0.1080228061621385, "MAE_Std": 0.1296804242326261, "Fit_Time_s": 2.186, "Infer_Time_s": 0.082, "Time (s)": 2.269, "Task": "ETTm1_H192"}, {"Dataset": "ETTm1", "Horizon": 192, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 72, "MSE": 0.0761499014542919, "MAE": 0.2074037105917455, "RMSE": 0.275952715975567, "MSE_Std": 0.0990281414954618, "MAE_Std": 0.124149632809924, "Fit_Time_s": 5.156, "Infer_Time_s": 0.278, "Time (s)": 5.434, "Task": "ETTm1_H192"}, {"Dataset": "ETTm1", "Horizon": 192, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 72, "MSE": 0.0724562583337411, "MAE": 0.1984042856625167, "RMSE": 0.2691770018663206, "MSE_Std": 0.1028239560756819, "MAE_Std": 0.1250461116119141, "Fit_Time_s": 7.106, "Infer_Time_s": 0.231, "Time (s)": 7.337, "Task": "ETTm1_H192"}, {"Dataset": "ETTm1", "Horizon": 192, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 72, "MSE": 0.075338019356043, "MAE": 0.2010311236618397, "RMSE": 0.2744777210559047, "MSE_Std": 0.1097209728421585, "MAE_Std": 0.1349318054802518, "Fit_Time_s": 5.803, "Infer_Time_s": 3.46, "Time (s)": 9.263, "Task": "ETTm1_H192"}, {"Dataset": "ETTm1", "Horizon": 192, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 72, "MSE": 0.0869219351538198, "MAE": 0.2192377197257962, "RMSE": 0.2948252620686019, "MSE_Std": 0.1050901228904847, "MAE_Std": 0.139264045692126, "Fit_Time_s": 0.0, "Infer_Time_s": 0.807, "Time (s)": 0.807, "Task": "ETTm1_H192"}, {"Dataset": "ETTm1", "Horizon": 336, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 41, "MSE": 0.111259093847696, "MAE": 0.2526491714217031, "RMSE": 0.3335552335786323, "MSE_Std": 0.1121523326548925, "MAE_Std": 0.1224448756632041, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "ETTm1_H336"}, {"Dataset": "ETTm1", "Horizon": 336, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 41, "MSE": 0.2018934070018803, "MAE": 0.2864705973199911, "RMSE": 0.4493255022830112, "MSE_Std": 0.597600532611123, "MAE_Std": 0.2741619550645943, "Fit_Time_s": 0.086, "Infer_Time_s": 3.28, "Time (s)": 3.366, "Task": "ETTm1_H336"}, {"Dataset": "ETTm1", "Horizon": 336, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 41, "MSE": 0.0811577532051913, "MAE": 0.2138855101776809, "RMSE": 0.2848819987384097, "MSE_Std": 0.0868585923765949, "MAE_Std": 0.1081822924285773, "Fit_Time_s": 6.331, "Infer_Time_s": 0.128, "Time (s)": 6.458, "Task": "ETTm1_H336"}, {"Dataset": "ETTm1", "Horizon": 336, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 41, "MSE": 0.0997207565179084, "MAE": 0.2388742576123879, "RMSE": 0.315785934642296, "MSE_Std": 0.1192177284358695, "MAE_Std": 0.1258833947360459, "Fit_Time_s": 4.237, "Infer_Time_s": 0.093, "Time (s)": 4.33, "Task": "ETTm1_H336"}, {"Dataset": "ETTm1", "Horizon": 336, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 41, "MSE": 0.0877396471875067, "MAE": 0.2197673423751483, "RMSE": 0.2962087898552417, "MSE_Std": 0.104254977440268, "MAE_Std": 0.1184373097886135, "Fit_Time_s": 6.329, "Infer_Time_s": 0.083, "Time (s)": 6.412, "Task": "ETTm1_H336"}, {"Dataset": "ETTm1", "Horizon": 336, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 41, "MSE": 0.0954728031594839, "MAE": 0.2283739703881654, "RMSE": 0.3089867362193463, "MSE_Std": 0.1203218638678988, "MAE_Std": 0.1328817350326206, "Fit_Time_s": 7.963, "Infer_Time_s": 0.461, "Time (s)": 8.424, "Task": "ETTm1_H336"}, {"Dataset": "ETTm1", "Horizon": 336, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 41, "MSE": 0.0944160401265397, "MAE": 0.2276612106083806, "RMSE": 0.3072719318885792, "MSE_Std": 0.1170779722518235, "MAE_Std": 0.1290804847331785, "Fit_Time_s": 6.725, "Infer_Time_s": 3.465, "Time (s)": 10.191, "Task": "ETTm1_H336"}, {"Dataset": "ETTm1", "Horizon": 336, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 41, "MSE": 0.0988530793360153, "MAE": 0.2247834578285699, "RMSE": 0.3144090955045915, "MSE_Std": 0.135227954285576, "MAE_Std": 0.1432185003856942, "Fit_Time_s": 0.0, "Infer_Time_s": 1.069, "Time (s)": 1.069, "Task": "ETTm1_H336"}, {"Dataset": "ETTm1", "Horizon": 720, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 19, "MSE": 0.1442325095824745, "MAE": 0.2856941150622737, "RMSE": 0.379779553928953, "MSE_Std": 0.1437164452133889, "MAE_Std": 0.1476238077604615, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "ETTm1_H720"}, {"Dataset": "ETTm1", "Horizon": 720, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 19, "MSE": 0.1897858695872074, "MAE": 0.335685247120341, "RMSE": 0.4356442006812525, "MSE_Std": 0.2013448920337056, "MAE_Std": 0.1911234465633724, "Fit_Time_s": 0.085, "Infer_Time_s": 1.52, "Time (s)": 1.605, "Task": "ETTm1_H720"}, {"Dataset": "ETTm1", "Horizon": 720, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 19, "MSE": 0.1369177085242767, "MAE": 0.2856915211693312, "RMSE": 0.3700239296643891, "MSE_Std": 0.126776779616175, "MAE_Std": 0.1420005777132232, "Fit_Time_s": 2.534, "Infer_Time_s": 0.075, "Time (s)": 2.609, "Task": "ETTm1_H720"}, {"Dataset": "ETTm1", "Horizon": 720, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 19, "MSE": 0.1394660930308724, "MAE": 0.2812844884737205, "RMSE": 0.3734515939594748, "MSE_Std": 0.1395496257865604, "MAE_Std": 0.1514626217661333, "Fit_Time_s": 1.462, "Infer_Time_s": 0.03, "Time (s)": 1.491, "Task": "ETTm1_H720"}, {"Dataset": "ETTm1", "Horizon": 720, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 19, "MSE": 0.1552383242146768, "MAE": 0.3019441830820107, "RMSE": 0.3940029494999711, "MSE_Std": 0.155065704756542, "MAE_Std": 0.1596250222398053, "Fit_Time_s": 2.328, "Infer_Time_s": 0.06, "Time (s)": 2.389, "Task": "ETTm1_H720"}, {"Dataset": "ETTm1", "Horizon": 720, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 19, "MSE": 0.1474146809672202, "MAE": 0.2845232191147271, "RMSE": 0.3839461954066223, "MSE_Std": 0.1625610213713515, "MAE_Std": 0.1716432515752458, "Fit_Time_s": 4.694, "Infer_Time_s": 0.185, "Time (s)": 4.878, "Task": "ETTm1_H720"}, {"Dataset": "ETTm1", "Horizon": 720, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 19, "MSE": 0.1403504347321674, "MAE": 0.2794067725256294, "RMSE": 0.3746337341086189, "MSE_Std": 0.1491539603397378, "MAE_Std": 0.1594128209796565, "Fit_Time_s": 2.988, "Infer_Time_s": 0.504, "Time (s)": 3.492, "Task": "ETTm1_H720"}, {"Dataset": "ETTm1", "Horizon": 720, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 19, "MSE": 0.1331324163383828, "MAE": 0.268316373107394, "RMSE": 0.3648731510242743, "MSE_Std": 0.1755795692282189, "MAE_Std": 0.1623978710487209, "Fit_Time_s": 0.0, "Infer_Time_s": 0.705, "Time (s)": 0.705, "Task": "ETTm1_H720"}, {"Dataset": "Weather", "Horizon": 96, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 109, "MSE": 0.0016314885568963, "MAE": 0.0288638391645132, "RMSE": 0.0403916892057798, "MSE_Std": 0.0023283431367534, "MAE_Std": 0.0210962547424093, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "Weather_H96"}, {"Dataset": "Weather", "Horizon": 96, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 109, "MSE": 0.0010060509970328, "MAE": 0.0225114373306686, "RMSE": 0.031718306969837, "MSE_Std": 0.0012923309705387, "MAE_Std": 0.0158083713920265, "Fit_Time_s": 0.097, "Infer_Time_s": 8.72, "Time (s)": 8.817, "Task": "Weather_H96"}, {"Dataset": "Weather", "Horizon": 96, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 109, "MSE": 0.00084022525685, "MAE": 0.0210804083541449, "RMSE": 0.0289866392817462, "MSE_Std": 0.0009890030578611, "MAE_Std": 0.0127918768082789, "Fit_Time_s": 2.258, "Infer_Time_s": 0.066, "Time (s)": 2.324, "Task": "Weather_H96"}, {"Dataset": "Weather", "Horizon": 96, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 109, "MSE": 0.002177717852209, "MAE": 0.0334080278710078, "RMSE": 0.0466660246025844, "MSE_Std": 0.0030796911942677, "MAE_Std": 0.0257196385673638, "Fit_Time_s": 1.102, "Infer_Time_s": 0.042, "Time (s)": 1.144, "Task": "Weather_H96"}, {"Dataset": "Weather", "Horizon": 96, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 109, "MSE": 0.0009268454749044, "MAE": 0.021507594625388, "RMSE": 0.0304441369545019, "MSE_Std": 0.001258797673946, "MAE_Std": 0.0146753353107676, "Fit_Time_s": 1.693, "Infer_Time_s": 0.075, "Time (s)": 1.767, "Task": "Weather_H96"}, {"Dataset": "Weather", "Horizon": 96, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 109, "MSE": 0.0011420500838256, "MAE": 0.0241757866329215, "RMSE": 0.0337942315170157, "MSE_Std": 0.0016104238537276, "MAE_Std": 0.0170942730432364, "Fit_Time_s": 4.261, "Infer_Time_s": 0.158, "Time (s)": 4.418, "Task": "Weather_H96"}, {"Dataset": "Weather", "Horizon": 96, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 109, "MSE": 0.0013359280049349, "MAE": 0.0271191841561701, "RMSE": 0.0365503489030542, "MSE_Std": 0.0018708062328972, "MAE_Std": 0.0189671818499799, "Fit_Time_s": 2.615, "Infer_Time_s": 2.211, "Time (s)": 4.826, "Task": "Weather_H96"}, {"Dataset": "Weather", "Horizon": 96, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 109, "MSE": 0.0008944650274879, "MAE": 0.0217509535286556, "RMSE": 0.0299076081873481, "MSE_Std": 0.0010927479677702, "MAE_Std": 0.0144420789126993, "Fit_Time_s": 0.0, "Infer_Time_s": 0.338, "Time (s)": 0.338, "Task": "Weather_H96"}, {"Dataset": "Weather", "Horizon": 192, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.0016964425352942, "MAE": 0.0296198280410431, "RMSE": 0.0411878930669469, "MSE_Std": 0.0019272428515423, "MAE_Std": 0.0177925369189805, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "Weather_H192"}, {"Dataset": "Weather", "Horizon": 192, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.0015022735177645, "MAE": 0.0269442875708542, "RMSE": 0.0387591733369604, "MSE_Std": 0.00205239815141, "MAE_Std": 0.0196673879036179, "Fit_Time_s": 0.095, "Infer_Time_s": 4.32, "Time (s)": 4.415, "Task": "Weather_H192"}, {"Dataset": "Weather", "Horizon": 192, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.0013302462046466, "MAE": 0.0258120229421826, "RMSE": 0.036472540419426, "MSE_Std": 0.0017788322296155, "MAE_Std": 0.0168403022954356, "Fit_Time_s": 2.601, "Infer_Time_s": 0.052, "Time (s)": 2.653, "Task": "Weather_H192"}, {"Dataset": "Weather", "Horizon": 192, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.0030223287117401, "MAE": 0.0397261863773508, "RMSE": 0.054975710197688, "MSE_Std": 0.0036088910652376, "MAE_Std": 0.0272002060189491, "Fit_Time_s": 1.293, "Infer_Time_s": 0.033, "Time (s)": 1.326, "Task": "Weather_H192"}, {"Dataset": "Weather", "Horizon": 192, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.0012093935319428, "MAE": 0.0243299357334223, "RMSE": 0.0347763358038603, "MSE_Std": 0.001441854237568, "MAE_Std": 0.0151553127416667, "Fit_Time_s": 1.9, "Infer_Time_s": 0.047, "Time (s)": 1.947, "Task": "Weather_H192"}, {"Dataset": "Weather", "Horizon": 192, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.0012187170819933, "MAE": 0.0257054563101495, "RMSE": 0.0349101286447553, "MSE_Std": 0.0013094362174387, "MAE_Std": 0.0145944997628842, "Fit_Time_s": 4.514, "Infer_Time_s": 0.205, "Time (s)": 4.719, "Task": "Weather_H192"}, {"Dataset": "Weather", "Horizon": 192, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.0013472824927988, "MAE": 0.0278901795265847, "RMSE": 0.0367053469238314, "MSE_Std": 0.0014620741687835, "MAE_Std": 0.0154197731962225, "Fit_Time_s": 2.772, "Infer_Time_s": 1.141, "Time (s)": 3.913, "Task": "Weather_H192"}, {"Dataset": "Weather", "Horizon": 192, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 54, "MSE": 0.0012230252063252, "MAE": 0.0251949893758904, "RMSE": 0.0349717772829075, "MSE_Std": 0.0014521385497665, "MAE_Std": 0.0156130481665117, "Fit_Time_s": 0.0, "Infer_Time_s": 0.282, "Time (s)": 0.282, "Task": "Weather_H192"}, {"Dataset": "Weather", "Horizon": 336, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 31, "MSE": 0.0020393900772606, "MAE": 0.0320299691108631, "RMSE": 0.0451596066995793, "MSE_Std": 0.002075510448684, "MAE_Std": 0.0191994565932465, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "Weather_H336"}, {"Dataset": "Weather", "Horizon": 336, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 31, "MSE": 0.0022496770296673, "MAE": 0.0312877250663145, "RMSE": 0.0474307603741213, "MSE_Std": 0.0041498441278554, "MAE_Std": 0.0259032152530794, "Fit_Time_s": 0.094, "Infer_Time_s": 2.48, "Time (s)": 2.574, "Task": "Weather_H336"}, {"Dataset": "Weather", "Horizon": 336, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 31, "MSE": 0.0013551379032847, "MAE": 0.0265707668454438, "RMSE": 0.036812197751354, "MSE_Std": 0.0014350175111371, "MAE_Std": 0.0151897016460219, "Fit_Time_s": 4.152, "Infer_Time_s": 0.071, "Time (s)": 4.222, "Task": "Weather_H336"}, {"Dataset": "Weather", "Horizon": 336, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 31, "MSE": 0.0032765847347462, "MAE": 0.0415262125438915, "RMSE": 0.0572414599285013, "MSE_Std": 0.0037078668315046, "MAE_Std": 0.0275866747818122, "Fit_Time_s": 2.001, "Infer_Time_s": 0.048, "Time (s)": 2.048, "Task": "Weather_H336"}, {"Dataset": "Weather", "Horizon": 336, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 31, "MSE": 0.0015551942582789, "MAE": 0.0276793095236038, "RMSE": 0.0394359513423843, "MSE_Std": 0.0015661433659684, "MAE_Std": 0.0156036182131216, "Fit_Time_s": 2.572, "Infer_Time_s": 0.043, "Time (s)": 2.615, "Task": "Weather_H336"}, {"Dataset": "Weather", "Horizon": 336, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 31, "MSE": 0.0013979189216885, "MAE": 0.0272443022171152, "RMSE": 0.0373887539467219, "MSE_Std": 0.0016634385336807, "MAE_Std": 0.0165878781086246, "Fit_Time_s": 4.723, "Infer_Time_s": 0.233, "Time (s)": 4.956, "Task": "Weather_H336"}, {"Dataset": "Weather", "Horizon": 336, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 31, "MSE": 0.0017056389161003, "MAE": 0.0309659189649372, "RMSE": 0.0412993815462206, "MSE_Std": 0.0018220662997239, "MAE_Std": 0.0182134636785256, "Fit_Time_s": 3.427, "Infer_Time_s": 0.708, "Time (s)": 4.135, "Task": "Weather_H336"}, {"Dataset": "Weather", "Horizon": 336, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 31, "MSE": 0.0017472963756745, "MAE": 0.030007407970131, "RMSE": 0.0418006743447342, "MSE_Std": 0.0024858792656708, "MAE_Std": 0.0197547624944379, "Fit_Time_s": 0.0, "Infer_Time_s": 0.471, "Time (s)": 0.471, "Task": "Weather_H336"}, {"Dataset": "Weather", "Horizon": 720, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 14, "MSE": 0.0024999865854115, "MAE": 0.0374713848464394, "RMSE": 0.0499998658539351, "MSE_Std": 0.001790008795405, "MAE_Std": 0.0163445576287095, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "Weather_H720"}, {"Dataset": "Weather", "Horizon": 720, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 14, "MSE": 0.0015996890455378, "MAE": 0.0300470648125734, "RMSE": 0.0399961128803512, "MSE_Std": 0.0012215649196581, "MAE_Std": 0.0125940093237269, "Fit_Time_s": 0.09, "Infer_Time_s": 1.12, "Time (s)": 1.21, "Task": "Weather_H720"}, {"Dataset": "Weather", "Horizon": 720, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 14, "MSE": 0.0012763676434792, "MAE": 0.0259420391544767, "RMSE": 0.0357262878491347, "MSE_Std": 0.0010754277220314, "MAE_Std": 0.0116429614037033, "Fit_Time_s": 2.318, "Infer_Time_s": 0.056, "Time (s)": 2.374, "Task": "Weather_H720"}, {"Dataset": "Weather", "Horizon": 720, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 14, "MSE": 0.0034612650070339, "MAE": 0.0428799087715654, "RMSE": 0.0588325165791331, "MSE_Std": 0.0034948468943776, "MAE_Std": 0.0273027040793383, "Fit_Time_s": 1.262, "Infer_Time_s": 0.032, "Time (s)": 1.294, "Task": "Weather_H720"}, {"Dataset": "Weather", "Horizon": 720, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 14, "MSE": 0.0017044286444896, "MAE": 0.0296509062985224, "RMSE": 0.0412847265279747, "MSE_Std": 0.0014703738958861, "MAE_Std": 0.0153383289009246, "Fit_Time_s": 2.435, "Infer_Time_s": 0.062, "Time (s)": 2.497, "Task": "Weather_H720"}, {"Dataset": "Weather", "Horizon": 720, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 14, "MSE": 0.0017908272687936, "MAE": 0.0319851549291812, "RMSE": 0.042318167124695, "MSE_Std": 0.0013968012507932, "MAE_Std": 0.0141212472147187, "Fit_Time_s": 4.717, "Infer_Time_s": 0.062, "Time (s)": 4.779, "Task": "Weather_H720"}, {"Dataset": "Weather", "Horizon": 720, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 14, "MSE": 0.0021300174470073, "MAE": 0.0355523217282282, "RMSE": 0.0461521120535926, "MSE_Std": 0.0016224177981016, "MAE_Std": 0.0163255385249225, "Fit_Time_s": 3.007, "Infer_Time_s": 0.407, "Time (s)": 3.413, "Task": "Weather_H720"}, {"Dataset": "Weather", "Horizon": 720, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 14, "MSE": 0.0017638454440564, "MAE": 0.0317818003388904, "RMSE": 0.0419981600079867, "MSE_Std": 0.0013912738542858, "MAE_Std": 0.0144680337080762, "Fit_Time_s": 0.0, "Infer_Time_s": 0.599, "Time (s)": 0.599, "Task": "Weather_H720"}, {"Dataset": "Electricity", "Horizon": 96, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.693893107658524, "MAE": 0.611099458273217, "RMSE": 0.833002465577698, "MSE_Std": 0.4498063236972547, "MAE_Std": 0.2159680450726467, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "Electricity_H96"}, {"Dataset": "Electricity", "Horizon": 96, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.7445803687087177, "MAE": 0.6042438072441852, "RMSE": 0.8628907049613628, "MSE_Std": 1.606725130660018, "MAE_Std": 0.4097557815796014, "Fit_Time_s": 0.327, "Infer_Time_s": 4.32, "Time (s)": 4.647, "Task": "Electricity_H96"}, {"Dataset": "Electricity", "Horizon": 96, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.3180160560602136, "MAE": 0.4389632897528411, "RMSE": 0.563929123259487, "MSE_Std": 0.2639505236383394, "MAE_Std": 0.1907329266665786, "Fit_Time_s": 1.85, "Infer_Time_s": 0.044, "Time (s)": 1.894, "Task": "Electricity_H96"}, {"Dataset": "Electricity", "Horizon": 96, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.2270643949913904, "MAE": 0.3420205132265279, "RMSE": 0.4765127437869741, "MSE_Std": 0.2432028019855434, "MAE_Std": 0.1446507378618947, "Fit_Time_s": 0.982, "Infer_Time_s": 0.031, "Time (s)": 1.013, "Task": "Electricity_H96"}, {"Dataset": "Electricity", "Horizon": 96, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.2668492017816257, "MAE": 0.3935792269391931, "RMSE": 0.5165744881250193, "MSE_Std": 0.1753109550087528, "MAE_Std": 0.137890268901827, "Fit_Time_s": 1.768, "Infer_Time_s": 0.074, "Time (s)": 1.842, "Task": "Electricity_H96"}, {"Dataset": "Electricity", "Horizon": 96, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.2566844353686254, "MAE": 0.3765192141603452, "RMSE": 0.5066403412368832, "MSE_Std": 0.2052385405168507, "MAE_Std": 0.1374333655498996, "Fit_Time_s": 5.052, "Infer_Time_s": 0.187, "Time (s)": 5.239, "Task": "Electricity_H96"}, {"Dataset": "Electricity", "Horizon": 96, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 54, "MSE": 0.2688583343195863, "MAE": 0.3749032715385882, "RMSE": 0.5185155102015622, "MSE_Std": 0.3166352869895262, "MAE_Std": 0.1747153407188325, "Fit_Time_s": 2.542, "Infer_Time_s": 1.091, "Time (s)": 3.633, "Task": "Electricity_H96"}, {"Dataset": "Electricity", "Horizon": 96, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 54, "MSE": 0.1846006971718094, "MAE": 0.2957494412367497, "RMSE": 0.429651832501398, "MSE_Std": 0.2509762036945807, "MAE_Std": 0.1614067691556902, "Fit_Time_s": 0.0, "Infer_Time_s": 0.152, "Time (s)": 0.152, "Task": "Electricity_H96"}, {"Dataset": "Electricity", "Horizon": 192, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 27, "MSE": 0.6081737121996494, "MAE": 0.5563327156237733, "RMSE": 0.7798549302271862, "MSE_Std": 0.3783448576043011, "MAE_Std": 0.1915769494454616, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "Electricity_H192"}, {"Dataset": "Electricity", "Horizon": 192, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 27, "MSE": 1.7331128412435657, "MAE": 0.7054791221660477, "RMSE": 1.3164774366632972, "MSE_Std": 6.378040449555746, "MAE_Std": 0.9256614634956428, "Fit_Time_s": 0.32, "Infer_Time_s": 2.16, "Time (s)": 2.48, "Task": "Electricity_H192"}, {"Dataset": "Electricity", "Horizon": 192, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 27, "MSE": 0.4111207702135148, "MAE": 0.4821397258866312, "RMSE": 0.6411870009704772, "MSE_Std": 0.452886937122975, "MAE_Std": 0.2684366531025651, "Fit_Time_s": 1.994, "Infer_Time_s": 0.209, "Time (s)": 2.204, "Task": "Electricity_H192"}, {"Dataset": "Electricity", "Horizon": 192, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 27, "MSE": 0.2599976563348712, "MAE": 0.367620756741935, "RMSE": 0.509899653201364, "MSE_Std": 0.2553621773095429, "MAE_Std": 0.154501546190887, "Fit_Time_s": 1.003, "Infer_Time_s": 0.028, "Time (s)": 1.031, "Task": "Electricity_H192"}, {"Dataset": "Electricity", "Horizon": 192, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 27, "MSE": 0.2770285274889467, "MAE": 0.4049165052676534, "RMSE": 0.5263349955009136, "MSE_Std": 0.144907726375886, "MAE_Std": 0.117772551291004, "Fit_Time_s": 1.683, "Infer_Time_s": 0.046, "Time (s)": 1.728, "Task": "Electricity_H192"}, {"Dataset": "Electricity", "Horizon": 192, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 27, "MSE": 0.2705124306769235, "MAE": 0.3852723017143747, "RMSE": 0.5201080951849563, "MSE_Std": 0.1987204974594852, "MAE_Std": 0.1237889867230502, "Fit_Time_s": 4.051, "Infer_Time_s": 0.056, "Time (s)": 4.106, "Task": "Electricity_H192"}, {"Dataset": "Electricity", "Horizon": 192, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 27, "MSE": 0.3424636062537592, "MAE": 0.4269851161384948, "RMSE": 0.5852039014341576, "MSE_Std": 0.3500789692043276, "MAE_Std": 0.1847651146840076, "Fit_Time_s": 2.783, "Infer_Time_s": 0.647, "Time (s)": 3.431, "Task": "Electricity_H192"}, {"Dataset": "Electricity", "Horizon": 192, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 27, "MSE": 0.1997494310405209, "MAE": 0.3143479913143662, "RMSE": 0.4469333630872962, "MSE_Std": 0.2303844500148996, "MAE_Std": 0.1604508367082944, "Fit_Time_s": 0.0, "Infer_Time_s": 0.186, "Time (s)": 0.186, "Task": "Electricity_H192"}, {"Dataset": "Electricity", "Horizon": 336, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 15, "MSE": 0.945063627265136, "MAE": 0.731300779219988, "RMSE": 0.9721438305441926, "MSE_Std": 0.567668536099628, "MAE_Std": 0.2319836562687855, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "Electricity_H336"}, {"Dataset": "Electricity", "Horizon": 336, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 15, "MSE": 0.631709224534735, "MAE": 0.6044852520164634, "RMSE": 0.7948013742657564, "MSE_Std": 0.3910152081538073, "MAE_Std": 0.1993547846020221, "Fit_Time_s": 0.357, "Infer_Time_s": 1.2, "Time (s)": 1.557, "Task": "Electricity_H336"}, {"Dataset": "Electricity", "Horizon": 336, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 15, "MSE": 0.5581422483713462, "MAE": 0.5845848219045163, "RMSE": 0.7470891836797975, "MSE_Std": 0.4533740816116273, "MAE_Std": 0.2651485962482155, "Fit_Time_s": 1.925, "Infer_Time_s": 0.038, "Time (s)": 1.963, "Task": "Electricity_H336"}, {"Dataset": "Electricity", "Horizon": 336, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 15, "MSE": 0.3395835561063673, "MAE": 0.4242582978385081, "RMSE": 0.5827379823783304, "MSE_Std": 0.3437298911638367, "MAE_Std": 0.192374296134035, "Fit_Time_s": 0.984, "Infer_Time_s": 0.026, "Time (s)": 1.009, "Task": "Electricity_H336"}, {"Dataset": "Electricity", "Horizon": 336, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 15, "MSE": 0.463428566114846, "MAE": 0.529838980222326, "RMSE": 0.680755878501865, "MSE_Std": 0.3282079504608821, "MAE_Std": 0.1777188244607871, "Fit_Time_s": 1.878, "Infer_Time_s": 0.06, "Time (s)": 1.938, "Task": "Electricity_H336"}, {"Dataset": "Electricity", "Horizon": 336, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 15, "MSE": 0.3661521618751416, "MAE": 0.4427771769655731, "RMSE": 0.605105083332756, "MSE_Std": 0.3515014448161301, "MAE_Std": 0.1886229665242274, "Fit_Time_s": 4.938, "Infer_Time_s": 0.061, "Time (s)": 5.0, "Task": "Electricity_H336"}, {"Dataset": "Electricity", "Horizon": 336, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 15, "MSE": 0.4190269844564039, "MAE": 0.4748110971253514, "RMSE": 0.647322936760628, "MSE_Std": 0.3586149910913133, "MAE_Std": 0.1803090671688972, "Fit_Time_s": 2.812, "Infer_Time_s": 0.358, "Time (s)": 3.17, "Task": "Electricity_H336"}, {"Dataset": "Electricity", "Horizon": 336, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 15, "MSE": 0.3436329425088164, "MAE": 0.4119763491915409, "RMSE": 0.5862021345140398, "MSE_Std": 0.4225357194503864, "MAE_Std": 0.234425151651716, "Fit_Time_s": 0.0, "Infer_Time_s": 0.258, "Time (s)": 0.258, "Task": "Electricity_H336"}, {"Dataset": "Electricity", "Horizon": 720, "Model": "SeasonalNaive", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 7, "MSE": 0.7812305231214016, "MAE": 0.6454751416708123, "RMSE": 0.8838724586281674, "MSE_Std": 0.4986495725850858, "MAE_Std": 0.218880062607624, "Fit_Time_s": 0.0, "Infer_Time_s": 0.03, "Time (s)": 0.03, "Task": "Electricity_H720"}, {"Dataset": "Electricity", "Horizon": 720, "Model": "AutoARIMA", "Paradigm": "Statistical", "Zero-Shot": false, "Num_Windows": 7, "MSE": 6.980986632002089, "MAE": 1.5062787975535767, "RMSE": 2.642155678986779, "MSE_Std": 15.598276116524223, "MAE_Std": 2.0132730063571014, "Fit_Time_s": 0.237, "Infer_Time_s": 0.56, "Time (s)": 0.797, "Task": "Electricity_H720"}, {"Dataset": "Electricity", "Horizon": 720, "Model": "N-HiTS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 7, "MSE": 0.3943322403857243, "MAE": 0.4769274104484227, "RMSE": 0.6279587887638204, "MSE_Std": 0.2067032447797572, "MAE_Std": 0.1140158721240953, "Fit_Time_s": 1.787, "Infer_Time_s": 0.044, "Time (s)": 1.832, "Task": "Electricity_H720"}, {"Dataset": "Electricity", "Horizon": 720, "Model": "DLinear", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 7, "MSE": 0.3965587817920943, "MAE": 0.4563763968207702, "RMSE": 0.6297291336694646, "MSE_Std": 0.261424381456675, "MAE_Std": 0.1421543290538672, "Fit_Time_s": 0.978, "Infer_Time_s": 0.027, "Time (s)": 1.005, "Task": "Electricity_H720"}, {"Dataset": "Electricity", "Horizon": 720, "Model": "N-BEATS", "Paradigm": "Deep Learning (MLP / Linear)", "Zero-Shot": false, "Num_Windows": 7, "MSE": 0.4749603192831638, "MAE": 0.5292971004947751, "RMSE": 0.6891736495856207, "MSE_Std": 0.2572811938758937, "MAE_Std": 0.1567489587984284, "Fit_Time_s": 1.836, "Infer_Time_s": 0.045, "Time (s)": 1.881, "Task": "Electricity_H720"}, {"Dataset": "Electricity", "Horizon": 720, "Model": "PatchTST", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 7, "MSE": 0.4416771979666172, "MAE": 0.4795258076512614, "RMSE": 0.6645879911393353, "MSE_Std": 0.3303121654146297, "MAE_Std": 0.1816417506949963, "Fit_Time_s": 4.337, "Infer_Time_s": 0.134, "Time (s)": 4.471, "Task": "Electricity_H720"}, {"Dataset": "Electricity", "Horizon": 720, "Model": "iTransformer", "Paradigm": "Deep Learning (Attention)", "Zero-Shot": false, "Num_Windows": 7, "MSE": 0.5466787548598434, "MAE": 0.5450752470222333, "RMSE": 0.7393772750496483, "MSE_Std": 0.3236929867149144, "MAE_Std": 0.1559745473579488, "Fit_Time_s": 2.794, "Infer_Time_s": 0.206, "Time (s)": 3.0, "Task": "Electricity_H720"}, {"Dataset": "Electricity", "Horizon": 720, "Model": "Chronos-Bolt", "Paradigm": "Foundation Model (LLM)", "Zero-Shot": true, "Num_Windows": 7, "MSE": 0.4312788781112038, "MAE": 0.4535914380460266, "RMSE": 0.6567182638782051, "MSE_Std": 0.3505734069362102, "MAE_Std": 0.1981745504750653, "Fit_Time_s": 0.0, "Infer_Time_s": 0.373, "Time (s)": 0.373, "Task": "Electricity_H720"}], "best_params": {"NHITS": {"validation_mse": 0.09557946082166108, "params": {"input_size": 512, "learning_rate": 0.00014285543420953942, "batch_size": 32, "windows_batch_size": 32, "n_blocks": [1, 1, 1], "dropout_prob_theta": 0.17299885984837132, "h": 96, "max_steps": 200, "random_seed": 42}}, "DLinear": {"validation_mse": 0.0830631115402082, "params": {"input_size": 192, "learning_rate": 0.0009988427111118651, "batch_size": 32, "windows_batch_size": 32, "moving_avg_window": 25, "h": 96, "max_steps": 200, "random_seed": 42}}, "NBEATS": {"validation_mse": 0.09305130144458634, "params": {"input_size": 336, "learning_rate": 7.52374288453485e-05, "batch_size": 128, "windows_batch_size": 128, "n_blocks": [1, 1, 1], "h": 96, "max_steps": 200, "random_seed": 42}}, "PatchTST": {"validation_mse": 0.0785630069393857, "params": {"input_size": 192, "learning_rate": 1.3218305732858278e-05, "batch_size": 128, "windows_batch_size": 128, "encoder_layers": 3, "hidden_size": 256, "dropout": 0.22217007277353745, "h": 96, "max_steps": 200, "random_seed": 42}}, "iTransformer": {"validation_mse": 0.08146406788852723, "params": {"input_size": 192, "learning_rate": 2.9380279387035334e-05, "batch_size": 128, "windows_batch_size": 128, "n_series": 1, "e_layers": 2, "hidden_size": 256, "dropout": 0.2497327922401265, "h": 96, "max_steps": 200, "random_seed": 42}}}, "friedman_mse": {"statistic": 41.0, "pvalue": 8.095946644206398e-07, "mean_ranks": {"PatchTST": 3.125, "N-HiTS": 3.375, "Chronos-Bolt": 3.625, "N-BEATS": 3.6875, "DLinear": 4.25, "iTransformer": 4.3125, "SeasonalNaive": 6.8125, "AutoARIMA": 6.8125}, "nemenyi": {"PatchTST": {"PatchTST": 1.0, "N-HiTS": 1.0, "Chronos-Bolt": 0.9991, "N-BEATS": 0.9981, "DLinear": 0.8996, "iTransformer": 0.8705, "SeasonalNaive": 0.0005, "AutoARIMA": 0.0005}, "N-HiTS": {"PatchTST": 1.0, "N-HiTS": 1.0, "Chronos-Bolt": 1.0, "N-BEATS": 1.0, "DLinear": 0.9731, "iTransformer": 0.9606, "SeasonalNaive": 0.0018, "AutoARIMA": 0.0018}, "Chronos-Bolt": {"PatchTST": 0.9991, "N-HiTS": 1.0, "Chronos-Bolt": 1.0, "N-BEATS": 1.0, "DLinear": 0.9964, "iTransformer": 0.9935, "SeasonalNaive": 0.0057, "AutoARIMA": 0.0057}, "N-BEATS": {"PatchTST": 0.9981, "N-HiTS": 1.0, "Chronos-Bolt": 1.0, "N-BEATS": 1.0, "DLinear": 0.9981, "iTransformer": 0.9964, "SeasonalNaive": 0.0074, "AutoARIMA": 0.0074}, "DLinear": {"PatchTST": 0.8996, "N-HiTS": 0.9731, "Chronos-Bolt": 0.9964, "N-BEATS": 0.9981, "DLinear": 1.0, "iTransformer": 1.0, "SeasonalNaive": 0.0615, "AutoARIMA": 0.0615}, "iTransformer": {"PatchTST": 0.8705, "N-HiTS": 0.9606, "Chronos-Bolt": 0.9935, "N-BEATS": 0.9964, "DLinear": 1.0, "iTransformer": 1.0, "SeasonalNaive": 0.0752, "AutoARIMA": 0.0752}, "SeasonalNaive": {"PatchTST": 0.0005, "N-HiTS": 0.0018, "Chronos-Bolt": 0.0057, "N-BEATS": 0.0074, "DLinear": 0.0615, "iTransformer": 0.0752, "SeasonalNaive": 1.0, "AutoARIMA": 1.0}, "AutoARIMA": {"PatchTST": 0.0005, "N-HiTS": 0.0018, "Chronos-Bolt": 0.0057, "N-BEATS": 0.0074, "DLinear": 0.0615, "iTransformer": 0.0752, "SeasonalNaive": 1.0, "AutoARIMA": 1.0}}}, "friedman_mae": {"statistic": 38.1875, "pvalue": 2.791326113912204e-06, "mean_ranks": {"PatchTST": 3.3125, "N-HiTS": 4.0625, "Chronos-Bolt": 2.9375, "N-BEATS": 3.75, "DLinear": 4.375, "iTransformer": 4.1875, "SeasonalNaive": 6.8125, "AutoARIMA": 6.5625}, "nemenyi": {"PatchTST": {"PatchTST": 1.0, "N-HiTS": 0.989, "Chronos-Bolt": 0.9999, "N-BEATS": 0.9996, "DLinear": 0.9242, "iTransformer": 0.9731, "SeasonalNaive": 0.0014, "AutoARIMA": 0.0043}, "N-HiTS": {"PatchTST": 0.989, "N-HiTS": 1.0, "Chronos-Bolt": 0.8996, "N-BEATS": 1.0, "DLinear": 1.0, "iTransformer": 1.0, "SeasonalNaive": 0.0323, "AutoARIMA": 0.0752}, "Chronos-Bolt": {"PatchTST": 0.9999, "N-HiTS": 0.8996, "Chronos-Bolt": 1.0, "N-BEATS": 0.9823, "DLinear": 0.7133, "iTransformer": 0.837, "SeasonalNaive": 0.0002, "AutoARIMA": 0.0007}, "N-BEATS": {"PatchTST": 0.9996, "N-HiTS": 1.0, "Chronos-Bolt": 0.9823, "N-BEATS": 1.0, "DLinear": 0.9964, "iTransformer": 0.9996, "SeasonalNaive": 0.0097, "AutoARIMA": 0.0257}, "DLinear": {"PatchTST": 0.9242, "N-HiTS": 1.0, "Chronos-Bolt": 0.7133, "N-BEATS": 0.9964, "DLinear": 1.0, "iTransformer": 1.0, "SeasonalNaive": 0.0913, "AutoARIMA": 0.1844}, "iTransformer": {"PatchTST": 0.9731, "N-HiTS": 1.0, "Chronos-Bolt": 0.837, "N-BEATS": 0.9996, "DLinear": 1.0, "iTransformer": 1.0, "SeasonalNaive": 0.05, "AutoARIMA": 0.1101}, "SeasonalNaive": {"PatchTST": 0.0014, "N-HiTS": 0.0323, "Chronos-Bolt": 0.0002, "N-BEATS": 0.0097, "DLinear": 0.0913, "iTransformer": 0.05, "SeasonalNaive": 1.0, "AutoARIMA": 1.0}, "AutoARIMA": {"PatchTST": 0.0043, "N-HiTS": 0.0752, "Chronos-Bolt": 0.0007, "N-BEATS": 0.0257, "DLinear": 0.1844, "iTransformer": 0.1101, "SeasonalNaive": 1.0, "AutoARIMA": 1.0}}}, "wilcoxon_mse_p": {"PatchTST": {"PatchTST": 1.0, "N-HiTS": 0.04527, "Chronos-Bolt": 0.020391, "N-BEATS": 0.009981, "DLinear": 0.000768, "iTransformer": 0.009481, "SeasonalNaive": 0.0, "AutoARIMA": 0.0}, "N-HiTS": {"PatchTST": 0.04527, "N-HiTS": 1.0, "Chronos-Bolt": 0.029176, "N-BEATS": 0.526293, "DLinear": 0.363125, "iTransformer": 0.521465, "SeasonalNaive": 0.0, "AutoARIMA": 0.0}, "Chronos-Bolt": {"PatchTST": 0.020391, "N-HiTS": 0.029176, "Chronos-Bolt": 1.0, "N-BEATS": 0.000148, "DLinear": 0.0, "iTransformer": 4.8e-05, "SeasonalNaive": 0.0, "AutoARIMA": 0.0}, "N-BEATS": {"PatchTST": 0.009981, "N-HiTS": 0.526293, "Chronos-Bolt": 0.000148, "N-BEATS": 1.0, "DLinear": 0.233271, "iTransformer": 0.681939, "SeasonalNaive": 0.0, "AutoARIMA": 0.0}, "DLinear": {"PatchTST": 0.000768, "N-HiTS": 0.363125, "Chronos-Bolt": 0.0, "N-BEATS": 0.233271, "DLinear": 1.0, "iTransformer": 0.192583, "SeasonalNaive": 0.0, "AutoARIMA": 0.0}, "iTransformer": {"PatchTST": 0.009481, "N-HiTS": 0.521465, "Chronos-Bolt": 4.8e-05, "N-BEATS": 0.681939, "DLinear": 0.192583, "iTransformer": 1.0, "SeasonalNaive": 0.0, "AutoARIMA": 0.0}, "SeasonalNaive": {"PatchTST": 0.0, "N-HiTS": 0.0, "Chronos-Bolt": 0.0, "N-BEATS": 0.0, "DLinear": 0.0, "iTransformer": 0.0, "SeasonalNaive": 1.0, "AutoARIMA": 0.114115}, "AutoARIMA": {"PatchTST": 0.0, "N-HiTS": 0.0, "Chronos-Bolt": 0.0, "N-BEATS": 0.0, "DLinear": 0.0, "iTransformer": 0.0, "SeasonalNaive": 0.114115, "AutoARIMA": 1.0}}, "winrate_mse": {"PatchTST": {"PatchTST": 0.5, "N-HiTS": 0.529, "Chronos-Bolt": 0.4527, "N-BEATS": 0.5335, "DLinear": 0.6204, "iTransformer": 0.5762, "SeasonalNaive": 0.7713, "AutoARIMA": 0.6753}, "N-HiTS": {"PatchTST": 0.471, "N-HiTS": 0.5, "Chronos-Bolt": 0.471, "N-BEATS": 0.5274, "DLinear": 0.5838, "iTransformer": 0.5046, "SeasonalNaive": 0.6982, "AutoARIMA": 0.6845}, "Chronos-Bolt": {"PatchTST": 0.5473, "N-HiTS": 0.529, "Chronos-Bolt": 0.5, "N-BEATS": 0.5671, "DLinear": 0.6479, "iTransformer": 0.5838, "SeasonalNaive": 0.7241, "AutoARIMA": 0.6433}, "N-BEATS": {"PatchTST": 0.4665, "N-HiTS": 0.4726, "Chronos-Bolt": 0.4329, "N-BEATS": 0.5, "DLinear": 0.6082, "iTransformer": 0.5213, "SeasonalNaive": 0.7409, "AutoARIMA": 0.6662}, "DLinear": {"PatchTST": 0.3796, "N-HiTS": 0.4162, "Chronos-Bolt": 0.3521, "N-BEATS": 0.3918, "DLinear": 0.5, "iTransformer": 0.4207, "SeasonalNaive": 0.6174, "AutoARIMA": 0.5305}, "iTransformer": {"PatchTST": 0.4238, "N-HiTS": 0.4954, "Chronos-Bolt": 0.4162, "N-BEATS": 0.4787, "DLinear": 0.5793, "iTransformer": 0.5, "SeasonalNaive": 0.7348, "AutoARIMA": 0.6296}, "SeasonalNaive": {"PatchTST": 0.2287, "N-HiTS": 0.3018, "Chronos-Bolt": 0.2759, "N-BEATS": 0.2591, "DLinear": 0.3826, "iTransformer": 0.2652, "SeasonalNaive": 0.5, "AutoARIMA": 0.439}, "AutoARIMA": {"PatchTST": 0.3247, "N-HiTS": 0.3155, "Chronos-Bolt": 0.3567, "N-BEATS": 0.3338, "DLinear": 0.4695, "iTransformer": 0.3704, "SeasonalNaive": 0.561, "AutoARIMA": 0.5}}, "forecast_samples": {"ETTh1": {"ds": ["2018-02-01 16:00:00", "2018-02-01 17:00:00", "2018-02-01 18:00:00", "2018-02-01 19:00:00", "2018-02-01 20:00:00", "2018-02-01 21:00:00", "2018-02-01 22:00:00", "2018-02-01 23:00:00", "2018-02-02 00:00:00", "2018-02-02 01:00:00", "2018-02-02 02:00:00", "2018-02-02 03:00:00", "2018-02-02 04:00:00", "2018-02-02 05:00:00", "2018-02-02 06:00:00", "2018-02-02 07:00:00", "2018-02-02 08:00:00", "2018-02-02 09:00:00", "2018-02-02 10:00:00", "2018-02-02 11:00:00", "2018-02-02 12:00:00", "2018-02-02 13:00:00", "2018-02-02 14:00:00", "2018-02-02 15:00:00", "2018-02-02 16:00:00", "2018-02-02 17:00:00", "2018-02-02 18:00:00", "2018-02-02 19:00:00", "2018-02-02 20:00:00", "2018-02-02 21:00:00", "2018-02-02 22:00:00", "2018-02-02 23:00:00", "2018-02-03 00:00:00", "2018-02-03 01:00:00", "2018-02-03 02:00:00", "2018-02-03 03:00:00", "2018-02-03 04:00:00", "2018-02-03 05:00:00", "2018-02-03 06:00:00", "2018-02-03 07:00:00", "2018-02-03 08:00:00", "2018-02-03 09:00:00", "2018-02-03 10:00:00", "2018-02-03 11:00:00", "2018-02-03 12:00:00", "2018-02-03 13:00:00", "2018-02-03 14:00:00", "2018-02-03 15:00:00", "2018-02-03 16:00:00", "2018-02-03 17:00:00", "2018-02-03 18:00:00", "2018-02-03 19:00:00", "2018-02-03 20:00:00", "2018-02-03 21:00:00", "2018-02-03 22:00:00", "2018-02-03 23:00:00", "2018-02-04 00:00:00", "2018-02-04 01:00:00", "2018-02-04 02:00:00", "2018-02-04 03:00:00", "2018-02-04 04:00:00", "2018-02-04 05:00:00", "2018-02-04 06:00:00", "2018-02-04 07:00:00", "2018-02-04 08:00:00", "2018-02-04 09:00:00", "2018-02-04 10:00:00", "2018-02-04 11:00:00", "2018-02-04 12:00:00", "2018-02-04 13:00:00", "2018-02-04 14:00:00", "2018-02-04 15:00:00", "2018-02-04 16:00:00", "2018-02-04 17:00:00", "2018-02-04 18:00:00", "2018-02-04 19:00:00", "2018-02-04 20:00:00", "2018-02-04 21:00:00", "2018-02-04 22:00:00", "2018-02-04 23:00:00", "2018-02-05 00:00:00", "2018-02-05 01:00:00", "2018-02-05 02:00:00", "2018-02-05 03:00:00", "2018-02-05 04:00:00", "2018-02-05 05:00:00", "2018-02-05 06:00:00", "2018-02-05 07:00:00", "2018-02-05 08:00:00", "2018-02-05 09:00:00", "2018-02-05 10:00:00", "2018-02-05 11:00:00", "2018-02-05 12:00:00", "2018-02-05 13:00:00", "2018-02-05 14:00:00", "2018-02-05 15:00:00"], "y_true": [-1.5849, -1.6096, -1.5849, -1.6096, -1.6428, -1.6014, -1.5271, -1.5684, -1.5849, -1.5187, -1.4857, -1.5353, -1.5518, -1.5766, -1.5684, -1.5932, -1.5766, -1.5105, -1.6344, -1.5518, -1.6096, -1.6262, -1.6428, -1.5766, -1.6428, -1.618, -1.7584, -1.7914, -1.808, -1.7419, -1.7337, -1.7914, -1.7914, -1.9319, -1.9485, -1.9485, -1.874, -1.9401, -2.0311, -2.0311, -2.0311, -1.9401, -1.8658, -1.7914, -1.8824, -1.7997, -1.6262, -1.6262, -1.6014, -1.651, -1.7419, -1.7501, -1.8328, -1.8824, -1.7749, -1.9401, -1.808, -1.8162, -1.7667, -1.7914, -1.7749, -1.7501, -1.8328, -1.8492, -1.808, -1.7171, -1.6923, -1.5849, -1.684, -1.6344, -1.5105, -1.5766, -1.5436, -1.5436, -1.651, -1.6923, -1.7419, -1.6262, -1.5518, -1.6096, -1.5271, -1.5849, -1.6592, -1.5518, -1.6675, -1.6096, -1.6923, -1.6758, -1.6096, -1.6262, -1.6923, -1.5766, -1.6923, -1.6428, -1.5023, -1.5601], "preds": {"PatchTST": [-1.5611, -1.6077, -1.5784, -1.594, -1.6105, -1.6611, -1.6489, -1.6282, -1.6262, -1.6642, -1.615, -1.6837, -1.6569, -1.7086, -1.6857, -1.709, -1.6722, -1.7082, -1.7139, -1.6982, -1.6871, -1.7074, -1.7375, -1.661, -1.7329, -1.7426, -1.7138, -1.7536, -1.7363, -1.7536, -1.7769, -1.7724, -1.8049, -1.7384, -1.8022, -1.8666, -1.8847, -1.8528, -1.8902, -1.8747, -1.8591, -1.8927, -1.8603, -1.8142, -1.8643, -1.8172, -1.7717, -1.8336, -1.8101, -1.8017, -1.8168, -1.832, -1.821, -1.8227, -1.7518, -1.8986, -1.9201, -1.9314, -1.9041, -1.8942, -1.9013, -1.894, -1.9374, -1.965, -1.9407, -1.9547, -1.9857, -1.9439, -1.9269, -1.8876, -1.913, -1.8719, -1.9175, -1.9303, -1.9254, -1.9126, -1.8974, -1.8987, -1.9077, -1.8846, -1.9045, -1.9035, -1.9198, -1.9186, -2.0016, -1.9039, -1.9961, -2.0398, -1.9588, -1.9224, -1.9452, -1.9318, -1.9221, -1.902, -1.9077, -1.8328], "N-HiTS": [-1.5943, -1.5871, -1.5758, -1.5595, -1.6042, -1.5873, -1.6015, -1.6201, -1.6299, -1.6401, -1.6142, -1.5991, -1.6175, -1.6026, -1.6034, -1.612, -1.5725, -1.6084, -1.5737, -1.5782, -1.5628, -1.5403, -1.569, -1.5703, -1.5803, -1.6037, -1.6219, -1.5995, -1.6333, -1.6182, -1.611, -1.645, -1.6569, -1.6615, -1.6747, -1.6742, -1.6742, -1.6789, -1.7118, -1.6808, -1.687, -1.6382, -1.6396, -1.6181, -1.6156, -1.6245, -1.6261, -1.6, -1.6047, -1.6295, -1.6333, -1.6457, -1.6388, -1.6735, -1.6758, -1.6797, -1.686, -1.6912, -1.6639, -1.6826, -1.6933, -1.6747, -1.6603, -1.646, -1.6658, -1.622, -1.6005, -1.6027, -1.6208, -1.6091, -1.6165, -1.6313, -1.6448, -1.6404, -1.6029, -1.6146, -1.6349, -1.6708, -1.6664, -1.659, -1.6557, -1.6717, -1.6576, -1.6992, -1.6627, -1.6792, -1.6575, -1.6485, -1.6566, -1.6274, -1.6158, -1.6461, -1.6504, -1.6295, -1.6232, -1.6453], "Chronos-Bolt": [-1.5267, -1.5256, -1.5283, -1.5351, -1.5393, -1.5415, -1.5419, -1.5452, -1.5461, -1.548, -1.5461, -1.5495, -1.5526, -1.5617, -1.5745, -1.5874, -1.5925, -1.5827, -1.5604, -1.5472, -1.5417, -1.5367, -1.5314, -1.5365, -1.5363, -1.5359, -1.5346, -1.5348, -1.5329, -1.5322, -1.5288, -1.5315, -1.5346, -1.5374, -1.5379, -1.5427, -1.5471, -1.5549, -1.5662, -1.5769, -1.5783, -1.5674, -1.5426, -1.5272, -1.5179, -1.5099, -1.5039, -1.5057, -1.5032, -1.503, -1.5071, -1.5138, -1.5129, -1.509, -1.5015, -1.499, -1.4994, -1.5009, -1.5045, -1.5143, -1.5219, -1.5299, -1.5361, -1.5467, -1.5261, -1.5235, -1.5186, -1.5106, -1.5016, -1.4939, -1.4916, -1.4959, -1.5009, -1.5018, -1.502, -1.5025, -1.5019, -1.4989, -1.4963, -1.4976, -1.4992, -1.5006, -1.5056, -1.5118, -1.518, -1.5252, -1.5363, -1.5398, -1.5384, -1.5421, -1.5391, -1.5342, -1.5246, -1.5146, -1.5104, -1.5096], "N-BEATS": [-1.5263, -1.5529, -1.6036, -1.5593, -1.5789, -1.5462, -1.6355, -1.6249, -1.6234, -1.6288, -1.6521, -1.5407, -1.6792, -1.5739, -1.6239, -1.6356, -1.6201, -1.6296, -1.6268, -1.6095, -1.5744, -1.6095, -1.6051, -1.5531, -1.6275, -1.6155, -1.5972, -1.6696, -1.5953, -1.6066, -1.6498, -1.5685, -1.6954, -1.6188, -1.6974, -1.6965, -1.7466, -1.6305, -1.7071, -1.7335, -1.6715, -1.7037, -1.6846, -1.7074, -1.6398, -1.6518, -1.6466, -1.625, -1.6569, -1.6359, -1.635, -1.6497, -1.6457, -1.6645, -1.6491, -1.7147, -1.6416, -1.7353, -1.6392, -1.7999, -1.6178, -1.6485, -1.7699, -1.7344, -1.7287, -1.7626, -1.6587, -1.7512, -1.7092, -1.7815, -1.7435, -1.6789, -1.6629, -1.6819, -1.727, -1.5649, -1.713, -1.6365, -1.6166, -1.63, -1.6723, -1.7407, -1.6386, -1.6758, -1.7245, -1.7308, -1.6946, -1.7311, -1.727, -1.6938, -1.7253, -1.5934, -1.7206, -1.7459, -1.628, -1.706], "DLinear": [-1.5391, -1.6156, -1.537, -1.4859, -1.5469, -1.5921, -1.4278, -1.6433, -1.5782, -1.747, -1.6631, -1.8305, -1.8412, -1.6888, -1.6191, -1.7386, -1.7977, -1.9044, -1.9149, -1.9811, -1.8781, -1.7536, -1.9497, -1.6736, -1.5623, -1.7793, -1.7833, -1.6219, -1.9135, -1.6979, -1.5814, -1.7196, -1.9208, -1.6471, -1.7558, -1.8732, -1.7897, -1.8722, -1.8551, -1.8936, -1.8697, -1.8977, -1.8133, -1.8976, -1.8274, -1.9151, -1.8133, -1.7994, -1.6783, -1.6914, -1.7098, -1.7176, -1.8549, -1.8338, -1.7316, -1.8038, -1.9376, -1.918, -1.7986, -1.8964, -1.7976, -1.7312, -1.7855, -1.8789, -1.8915, -1.8093, -1.725, -1.8233, -1.8377, -1.7431, -1.7917, -1.8918, -1.971, -2.0365, -1.9905, -1.8036, -1.887, -1.8566, -2.0148, -1.8699, -2.0792, -1.927, -1.815, -1.7347, -1.8838, -1.9368, -1.9909, -1.9462, -2.0231, -2.0146, -2.1356, -2.0783, -1.8592, -1.9064, -1.7909, -1.7895], "iTransformer": [-1.6064, -1.6238, -1.6253, -1.6605, -1.6213, -1.7099, -1.678, -1.6762, -1.677, -1.6761, -1.6777, -1.727, -1.6878, -1.7308, -1.7371, -1.7718, -1.7379, -1.7556, -1.7408, -1.7817, -1.7803, -1.7554, -1.6979, -1.6945, -1.7201, -1.7343, -1.7136, -1.7826, -1.7672, -1.7804, -1.7517, -1.795, -1.7709, -1.8492, -1.8159, -1.8241, -1.8639, -1.8327, -1.8676, -1.8765, -1.8737, -1.8851, -1.8307, -1.847, -1.8554, -1.8298, -1.8223, -1.8809, -1.8113, -1.8655, -1.7944, -1.793, -1.8515, -1.8306, -1.8374, -1.869, -1.8731, -1.8671, -1.8501, -1.9077, -1.9328, -1.9013, -1.9031, -1.9215, -1.9414, -1.9524, -1.8982, -1.927, -1.9132, -1.8714, -1.9073, -1.8542, -1.8679, -1.8393, -1.8473, -1.8722, -1.8171, -1.8221, -1.8302, -1.8683, -1.8524, -1.8861, -1.8851, -1.8922, -1.9022, -1.9338, -1.8565, -1.8193, -1.8809, -1.8855, -1.9667, -1.9309, -1.8689, -1.8904, -1.9205, -1.8346], "SeasonalNaive": [-1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.7088, -1.6758, -1.6758, -1.651, -1.6923, -1.7088, -1.7419, -1.7914, -1.7501, -1.6592, -1.5849, -1.4775, -1.5271, -1.5271, -1.2957, -1.5684, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.7088, -1.6758, -1.6758, -1.651, -1.6923, -1.7088, -1.7419, -1.7914, -1.7501, -1.6592, -1.5849, -1.4775, -1.5271, -1.5271, -1.2957, -1.5684, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.7088, -1.6758, -1.6758, -1.651, -1.6923, -1.7088, -1.7419, -1.7914, -1.7501, -1.6592, -1.5849, -1.4775, -1.5271, -1.5271, -1.2957, -1.5684, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.8245, -1.7088, -1.6758, -1.6758, -1.651, -1.6923, -1.7088, -1.7419, -1.7914, -1.7501, -1.6592, -1.5849, -1.4775, -1.5271, -1.5271, -1.2957, -1.5684], "AutoARIMA": [-1.5578, -1.5559, -1.5665, -1.5661, -1.5561, -1.5593, -1.5672, -1.5617, -1.5546, -1.5606, -1.5652, -1.5581, -1.5559, -1.564, -1.5653, -1.5598, -1.56, -1.5641, -1.5599, -1.5516, -1.556, -1.5596, -1.5492, -1.5522, -1.5569, -1.5586, -1.5537, -1.5536, -1.5583, -1.5575, -1.5527, -1.5543, -1.5579, -1.5549, -1.5518, -1.5552, -1.5576, -1.5543, -1.5536, -1.5585, -1.558, -1.5528, -1.5526, -1.5542, -1.553, -1.5497, -1.5484, -1.5542, -1.5513, -1.55, -1.5531, -1.5537, -1.5506, -1.551, -1.5535, -1.5524, -1.5499, -1.5512, -1.553, -1.5512, -1.5501, -1.5524, -1.5533, -1.5519, -1.5514, -1.5525, -1.5515, -1.5486, -1.5496, -1.5508, -1.5474, -1.5486, -1.5498, -1.5506, -1.5493, -1.5489, -1.5503, -1.5504, -1.5489, -1.549, -1.5502, -1.5495, -1.5484, -1.5492, -1.5502, -1.5494, -1.549, -1.5505, -1.5506, -1.5488, -1.5484, -1.5488, -1.5487, -1.5476, -1.5466, -1.5489]}, "tests_h96": {"PatchTST vs N-HiTS": {"dm_stat": 1.14, "dm_p": 0.2836, "wilcoxon_p": 0.0797}, "PatchTST vs DLinear": {"dm_stat": -1.808, "dm_p": 0.1041, "wilcoxon_p": 0.4793}, "PatchTST vs Chronos-Bolt": {"dm_stat": 0.624, "dm_p": 0.5483, "wilcoxon_p": 0.7037}, "PatchTST vs N-BEATS": {"dm_stat": -4.005, "dm_p": 0.0031, "wilcoxon_p": 0.139}, "N-HiTS vs Chronos-Bolt": {"dm_stat": -0.539, "dm_p": 0.6028, "wilcoxon_p": 0.9443}, "DLinear vs iTransformer": {"dm_stat": -0.918, "dm_p": 0.3824, "wilcoxon_p": 0.3707}}}, "ETTm1": {"ds": ["2018-02-01 16:00:00", "2018-02-01 16:15:00", "2018-02-01 16:30:00", "2018-02-01 16:45:00", "2018-02-01 17:00:00", "2018-02-01 17:15:00", "2018-02-01 17:30:00", "2018-02-01 17:45:00", "2018-02-01 18:00:00", "2018-02-01 18:15:00", "2018-02-01 18:30:00", "2018-02-01 18:45:00", "2018-02-01 19:00:00", "2018-02-01 19:15:00", "2018-02-01 19:30:00", "2018-02-01 19:45:00", "2018-02-01 20:00:00", "2018-02-01 20:15:00", "2018-02-01 20:30:00", "2018-02-01 20:45:00", "2018-02-01 21:00:00", "2018-02-01 21:15:00", "2018-02-01 21:30:00", "2018-02-01 21:45:00", "2018-02-01 22:00:00", "2018-02-01 22:15:00", "2018-02-01 22:30:00", "2018-02-01 22:45:00", "2018-02-01 23:00:00", "2018-02-01 23:15:00", "2018-02-01 23:30:00", "2018-02-01 23:45:00", "2018-02-02 00:00:00", "2018-02-02 00:15:00", "2018-02-02 00:30:00", "2018-02-02 00:45:00", "2018-02-02 01:00:00", "2018-02-02 01:15:00", "2018-02-02 01:30:00", "2018-02-02 01:45:00", "2018-02-02 02:00:00", "2018-02-02 02:15:00", "2018-02-02 02:30:00", "2018-02-02 02:45:00", "2018-02-02 03:00:00", "2018-02-02 03:15:00", "2018-02-02 03:30:00", "2018-02-02 03:45:00", "2018-02-02 04:00:00", "2018-02-02 04:15:00", "2018-02-02 04:30:00", "2018-02-02 04:45:00", "2018-02-02 05:00:00", "2018-02-02 05:15:00", "2018-02-02 05:30:00", "2018-02-02 05:45:00", "2018-02-02 06:00:00", "2018-02-02 06:15:00", "2018-02-02 06:30:00", "2018-02-02 06:45:00", "2018-02-02 07:00:00", "2018-02-02 07:15:00", "2018-02-02 07:30:00", "2018-02-02 07:45:00", "2018-02-02 08:00:00", "2018-02-02 08:15:00", "2018-02-02 08:30:00", "2018-02-02 08:45:00", "2018-02-02 09:00:00", "2018-02-02 09:15:00", "2018-02-02 09:30:00", "2018-02-02 09:45:00", "2018-02-02 10:00:00", "2018-02-02 10:15:00", "2018-02-02 10:30:00", "2018-02-02 10:45:00", "2018-02-02 11:00:00", "2018-02-02 11:15:00", "2018-02-02 11:30:00", "2018-02-02 11:45:00", "2018-02-02 12:00:00", "2018-02-02 12:15:00", "2018-02-02 12:30:00", "2018-02-02 12:45:00", "2018-02-02 13:00:00", "2018-02-02 13:15:00", "2018-02-02 13:30:00", "2018-02-02 13:45:00", "2018-02-02 14:00:00", "2018-02-02 14:15:00", "2018-02-02 14:30:00", "2018-02-02 14:45:00", "2018-02-02 15:00:00", "2018-02-02 15:15:00", "2018-02-02 15:30:00", "2018-02-02 15:45:00"], "y_true": [-1.585, -1.585, -1.6181, -1.6346, -1.6098, -1.6015, -1.6181, -1.6263, -1.585, -1.585, -1.6098, -1.6511, -1.6098, -1.6015, -1.6181, -1.6429, -1.6429, -1.6346, -1.6429, -1.6098, -1.6015, -1.5354, -1.552, -1.5272, -1.5272, -1.5437, -1.5437, -1.552, -1.5685, -1.552, -1.5685, -1.6098, -1.585, -1.585, -1.5437, -1.552, -1.5188, -1.5024, -1.5024, -1.4858, -1.4858, -1.494, -1.5106, -1.5272, -1.5354, -1.5272, -1.5188, -1.5272, -1.552, -1.5768, -1.5685, -1.585, -1.5768, -1.5602, -1.552, -1.5437, -1.5685, -1.5933, -1.5685, -1.6098, -1.5933, -1.6181, -1.5933, -1.6098, -1.5768, -1.585, -1.5685, -1.5272, -1.5106, -1.5602, -1.5933, -1.6015, -1.6346, -1.6511, -1.6511, -1.585, -1.552, -1.6263, -1.6098, -1.6098, -1.6098, -1.5933, -1.6511, -1.6511, -1.6263, -1.6511, -1.6925, -1.6677, -1.6429, -1.6594, -1.5685, -1.5933, -1.5768, -1.6098, -1.585, -1.585], "preds": {"PatchTST": [-1.599, -1.595, -1.5992, -1.6018, -1.5941, -1.5959, -1.6124, -1.6086, -1.6209, -1.607, -1.5935, -1.6117, -1.6028, -1.6108, -1.6401, -1.615, -1.6247, -1.6405, -1.5987, -1.6288, -1.6396, -1.613, -1.608, -1.6211, -1.6079, -1.6382, -1.6418, -1.6344, -1.6048, -1.6229, -1.6192, -1.6332, -1.6552, -1.6328, -1.634, -1.6246, -1.6253, -1.6471, -1.6435, -1.647, -1.6327, -1.6432, -1.6407, -1.6336, -1.6463, -1.6552, -1.6488, -1.6097, -1.618, -1.6432, -1.6366, -1.6252, -1.63, -1.6438, -1.6142, -1.6223, -1.5997, -1.6078, -1.5868, -1.5915, -1.6332, -1.617, -1.6099, -1.6174, -1.6305, -1.6319, -1.616, -1.6014, -1.6263, -1.6074, -1.6101, -1.5798, -1.5948, -1.6286, -1.5978, -1.5625, -1.5888, -1.5799, -1.5671, -1.5672, -1.5958, -1.6136, -1.5676, -1.602, -1.5698, -1.5814, -1.5742, -1.5574, -1.5837, -1.5885, -1.5961, -1.5751, -1.5916, -1.5969, -1.5942, -1.5965], "N-HiTS": [-1.5932, -1.5858, -1.5963, -1.5927, -1.5874, -1.585, -1.5853, -1.5887, -1.5939, -1.6108, -1.5795, -1.5853, -1.6112, -1.5934, -1.5896, -1.6182, -1.6289, -1.617, -1.6387, -1.6198, -1.6346, -1.6432, -1.6343, -1.6417, -1.6487, -1.6706, -1.6929, -1.6886, -1.6582, -1.6668, -1.6731, -1.6964, -1.715, -1.7167, -1.7295, -1.7218, -1.7028, -1.7222, -1.7297, -1.7226, -1.7194, -1.7111, -1.7206, -1.7243, -1.7206, -1.7453, -1.737, -1.7104, -1.7409, -1.7528, -1.7408, -1.7475, -1.7872, -1.7458, -1.7434, -1.7375, -1.7447, -1.7561, -1.7378, -1.7492, -1.74, -1.7268, -1.7356, -1.7279, -1.7132, -1.718, -1.698, -1.7152, -1.7316, -1.7124, -1.742, -1.7468, -1.7421, -1.7671, -1.7368, -1.7141, -1.7026, -1.6882, -1.6847, -1.694, -1.7078, -1.7133, -1.6774, -1.6781, -1.6858, -1.6641, -1.6811, -1.6876, -1.6718, -1.6818, -1.6754, -1.6547, -1.6691, -1.6479, -1.6298, -1.6462], "Chronos-Bolt": [-1.5839, -1.5815, -1.5801, -1.5776, -1.5723, -1.5681, -1.5696, -1.5717, -1.5719, -1.5756, -1.5831, -1.5862, -1.5838, -1.5826, -1.5778, -1.572, -1.5699, -1.5717, -1.5749, -1.5798, -1.5807, -1.5784, -1.5777, -1.5807, -1.5822, -1.5842, -1.5786, -1.5724, -1.5685, -1.5713, -1.5746, -1.578, -1.5773, -1.5773, -1.5802, -1.5828, -1.5825, -1.5824, -1.5836, -1.5806, -1.576, -1.5766, -1.5795, -1.5832, -1.5837, -1.5858, -1.5917, -1.5957, -1.5963, -1.5966, -1.5962, -1.5913, -1.5867, -1.5865, -1.5884, -1.5911, -1.5912, -1.5942, -1.5998, -1.604, -1.6039, -1.6081, -1.6108, -1.6113, -1.6082, -1.6095, -1.6117, -1.6101, -1.6071, -1.6078, -1.6071, -1.6067, -1.6079, -1.6098, -1.607, -1.6062, -1.6053, -1.6096, -1.6105, -1.6122, -1.611, -1.6119, -1.6128, -1.6121, -1.6096, -1.6088, -1.6085, -1.6078, -1.6063, -1.6088, -1.612, -1.6131, -1.6092, -1.6092, -1.609, -1.6104], "N-BEATS": [-1.5766, -1.6091, -1.5838, -1.609, -1.5976, -1.6143, -1.6077, -1.5887, -1.5966, -1.6308, -1.6426, -1.6176, -1.6243, -1.6449, -1.6171, -1.6377, -1.6269, -1.6239, -1.662, -1.6838, -1.6543, -1.6772, -1.6993, -1.6682, -1.6616, -1.6909, -1.6782, -1.6834, -1.6794, -1.678, -1.699, -1.6992, -1.6623, -1.6892, -1.6895, -1.6765, -1.6848, -1.6986, -1.7101, -1.7235, -1.71, -1.7317, -1.7115, -1.7356, -1.6941, -1.671, -1.709, -1.6858, -1.699, -1.7127, -1.7216, -1.6899, -1.7115, -1.6946, -1.696, -1.7047, -1.7134, -1.7041, -1.689, -1.7024, -1.6774, -1.6551, -1.706, -1.6668, -1.6647, -1.6699, -1.6613, -1.6931, -1.6625, -1.6389, -1.6277, -1.6855, -1.69, -1.7026, -1.6515, -1.6368, -1.6244, -1.5945, -1.6314, -1.6203, -1.6239, -1.6057, -1.6112, -1.5704, -1.6611, -1.5857, -1.5713, -1.6019, -1.5975, -1.6048, -1.5591, -1.5901, -1.622, -1.6414, -1.5822, -1.6118], "DLinear": [-1.5731, -1.5329, -1.5647, -1.6271, -1.5383, -1.4875, -1.5537, -1.5635, -1.4446, -1.3571, -1.4974, -1.4252, -1.5498, -1.6107, -1.5215, -1.6809, -1.5943, -1.6386, -1.6184, -1.5346, -1.461, -1.4832, -1.4663, -1.5387, -1.5862, -1.5411, -1.6238, -1.6496, -1.6856, -1.6252, -1.6482, -1.6899, -1.5669, -1.5719, -1.5631, -1.6315, -1.5503, -1.6446, -1.5966, -1.5636, -1.6201, -1.6458, -1.5713, -1.407, -1.5369, -1.4997, -1.5654, -1.5607, -1.5806, -1.6008, -1.5452, -1.4724, -1.3782, -1.4659, -1.5425, -1.4797, -1.4747, -1.5402, -1.5293, -1.533, -1.5535, -1.5174, -1.676, -1.599, -1.5311, -1.4949, -1.548, -1.6061, -1.5308, -1.5875, -1.5722, -1.5297, -1.6075, -1.6231, -1.6537, -1.5446, -1.6552, -1.581, -1.5899, -1.6856, -1.656, -1.6081, -1.6245, -1.6317, -1.5042, -1.5599, -1.6468, -1.6205, -1.5918, -1.6199, -1.5932, -1.6001, -1.578, -1.6061, -1.6899, -1.6284], "iTransformer": [-1.5449, -1.5498, -1.5682, -1.5684, -1.5471, -1.5792, -1.5756, -1.5606, -1.576, -1.5654, -1.5627, -1.5683, -1.5694, -1.5881, -1.5935, -1.5819, -1.577, -1.5826, -1.5797, -1.589, -1.6033, -1.565, -1.5936, -1.5936, -1.5944, -1.5947, -1.5782, -1.601, -1.6112, -1.5946, -1.6052, -1.6051, -1.5918, -1.6198, -1.6054, -1.6091, -1.6204, -1.6356, -1.6109, -1.615, -1.62, -1.6259, -1.6063, -1.6257, -1.6135, -1.6047, -1.611, -1.6523, -1.5939, -1.6248, -1.6165, -1.5908, -1.6326, -1.6235, -1.6163, -1.63, -1.603, -1.6016, -1.5979, -1.6067, -1.627, -1.5969, -1.6194, -1.6076, -1.6287, -1.6157, -1.5959, -1.6147, -1.615, -1.5783, -1.5988, -1.5972, -1.5994, -1.5903, -1.5868, -1.6076, -1.5877, -1.5926, -1.5715, -1.594, -1.5843, -1.5892, -1.5725, -1.5754, -1.5685, -1.5817, -1.5609, -1.555, -1.561, -1.5399, -1.5586, -1.5716, -1.5563, -1.5602, -1.5827, -1.5839], "SeasonalNaive": [-1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.8247, -1.7089, -1.6759, -1.6677, -1.6677, -1.6759, -1.6925, -1.6925, -1.6429, -1.6759, -1.6511, -1.6263, -1.6429, -1.6511, -1.6594, -1.6677, -1.7089, -1.6925, -1.7255, -1.7339, -1.7089, -1.7089, -1.7255, -1.7089, -1.7503, -1.7421, -1.7255, -1.7503, -1.7834, -1.7917, -1.8082, -1.7669, -1.7669, -1.7503, -1.7255, -1.7173, -1.6594, -1.6594, -1.6677, -1.6842, -1.6098, -1.585, -1.552, -1.5437, -1.494, -1.4776, -1.5024, -1.5685, -1.5272, -1.5272, -1.5024, -1.5354, -1.5106, -1.5272, -1.5188, -1.4528, -1.3453, -1.2957, -1.3866, -1.4197, -1.461, -1.5685, -1.5602, -1.5437, -1.5933], "AutoARIMA": [-1.5908, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909, -1.5909]}, "tests_h96": {"PatchTST vs N-HiTS": {"dm_stat": 1.214, "dm_p": 0.2268, "wilcoxon_p": 0.2686}, "PatchTST vs DLinear": {"dm_stat": -6.598, "dm_p": 0.0, "wilcoxon_p": 0.0}, "PatchTST vs Chronos-Bolt": {"dm_stat": -1.099, "dm_p": 0.2734, "wilcoxon_p": 0.185}, "PatchTST vs N-BEATS": {"dm_stat": -0.774, "dm_p": 0.4404, "wilcoxon_p": 0.2141}, "N-HiTS vs Chronos-Bolt": {"dm_stat": -1.961, "dm_p": 0.0518, "wilcoxon_p": 0.0762}, "DLinear vs iTransformer": {"dm_stat": 0.012, "dm_p": 0.9901, "wilcoxon_p": 0.0}}}, "Weather": {"ds": ["2020-10-19 19:30:00", "2020-10-19 19:40:00", "2020-10-19 19:50:00", "2020-10-19 20:00:00", "2020-10-19 20:10:00", "2020-10-19 20:20:00", "2020-10-19 20:30:00", "2020-10-19 20:40:00", "2020-10-19 20:50:00", "2020-10-19 21:00:00", "2020-10-19 21:10:00", "2020-10-19 21:20:00", "2020-10-19 21:30:00", "2020-10-19 21:40:00", "2020-10-19 21:50:00", "2020-10-19 22:00:00", "2020-10-19 22:10:00", "2020-10-19 22:20:00", "2020-10-19 22:30:00", "2020-10-19 22:40:00", "2020-10-19 22:50:00", "2020-10-19 23:00:00", "2020-10-19 23:10:00", "2020-10-19 23:20:00", "2020-10-19 23:30:00", "2020-10-19 23:40:00", "2020-10-19 23:50:00", "2020-10-20 00:00:00", "2020-10-20 00:10:00", "2020-10-20 00:20:00", "2020-10-20 00:30:00", "2020-10-20 00:40:00", "2020-10-20 00:50:00", "2020-10-20 01:00:00", "2020-10-20 01:10:00", "2020-10-20 01:20:00", "2020-10-20 01:30:00", "2020-10-20 01:40:00", "2020-10-20 01:50:00", "2020-10-20 02:00:00", "2020-10-20 02:10:00", "2020-10-20 02:20:00", "2020-10-20 02:30:00", "2020-10-20 02:40:00", "2020-10-20 02:50:00", "2020-10-20 03:00:00", "2020-10-20 03:10:00", "2020-10-20 03:20:00", "2020-10-20 03:30:00", "2020-10-20 03:40:00", "2020-10-20 03:50:00", "2020-10-20 04:00:00", "2020-10-20 04:10:00", "2020-10-20 04:20:00", "2020-10-20 04:30:00", "2020-10-20 04:40:00", "2020-10-20 04:50:00", "2020-10-20 05:00:00", "2020-10-20 05:10:00", "2020-10-20 05:20:00", "2020-10-20 05:30:00", "2020-10-20 05:40:00", "2020-10-20 05:50:00", "2020-10-20 06:00:00", "2020-10-20 06:10:00", "2020-10-20 06:20:00", "2020-10-20 06:30:00", "2020-10-20 06:40:00", "2020-10-20 06:50:00", "2020-10-20 07:00:00", "2020-10-20 07:10:00", "2020-10-20 07:20:00", "2020-10-20 07:30:00", "2020-10-20 07:40:00", "2020-10-20 07:50:00", "2020-10-20 08:00:00", "2020-10-20 08:10:00", "2020-10-20 08:20:00", "2020-10-20 08:30:00", "2020-10-20 08:40:00", "2020-10-20 08:50:00", "2020-10-20 09:00:00", "2020-10-20 09:10:00", "2020-10-20 09:20:00", "2020-10-20 09:30:00", "2020-10-20 09:40:00", "2020-10-20 09:50:00", "2020-10-20 10:00:00", "2020-10-20 10:10:00", "2020-10-20 10:20:00", "2020-10-20 10:30:00", "2020-10-20 10:40:00", "2020-10-20 10:50:00", "2020-10-20 11:00:00", "2020-10-20 11:10:00", "2020-10-20 11:20:00"], "y_true": [0.0301, 0.028, 0.0272, 0.0303, 0.0303, 0.029, 0.0285, 0.0319, 0.0355, 0.0394, 0.04, 0.0564, 0.0647, 0.0631, 0.071, 0.072, 0.0767, 0.0629, 0.0684, 0.0777, 0.073, 0.0769, 0.0803, 0.0728, 0.073, 0.0673, 0.0684, 0.073, 0.0871, 0.0861, 0.0793, 0.0863, 0.0863, 0.0822, 0.0769, 0.0855, 0.1072, 0.0835, 0.0772, 0.072, 0.0756, 0.0676, 0.0676, 0.0676, 0.0668, 0.0655, 0.0806, 0.0819, 0.0624, 0.0587, 0.0689, 0.0793, 0.0684, 0.066, 0.065, 0.0642, 0.0658, 0.0616, 0.0618, 0.0608, 0.0603, 0.0624, 0.0616, 0.0546, 0.0493, 0.0473, 0.0478, 0.0519, 0.0525, 0.0499, 0.0512, 0.06, 0.0585, 0.0569, 0.0595, 0.0564, 0.0624, 0.0694, 0.0809, 0.0889, 0.0986, 0.0918, 0.0629, 0.0532, 0.0462, 0.0392, 0.0342, 0.0327, 0.0361, 0.0363, 0.0327, 0.0277, 0.0259, 0.0251, 0.0197, 0.015], "preds": {"PatchTST": [0.0261, 0.0301, 0.0312, 0.031, 0.0366, 0.0329, 0.0364, 0.0372, 0.0358, 0.0308, 0.0326, 0.0354, 0.0294, 0.0402, 0.0324, 0.0394, 0.0337, 0.0393, 0.0372, 0.04, 0.0485, 0.0389, 0.0382, 0.0377, 0.0284, 0.042, 0.048, 0.0513, 0.0439, 0.0394, 0.044, 0.0375, 0.0463, 0.0418, 0.0459, 0.0564, 0.0565, 0.0434, 0.0482, 0.0435, 0.0513, 0.0499, 0.0539, 0.0478, 0.0463, 0.0464, 0.0563, 0.0516, 0.0573, 0.0481, 0.0578, 0.0498, 0.0457, 0.0405, 0.0505, 0.0416, 0.0476, 0.0525, 0.0522, 0.0539, 0.0515, 0.0547, 0.0586, 0.0474, 0.0612, 0.0485, 0.0507, 0.0578, 0.0545, 0.0534, 0.0523, 0.0461, 0.0512, 0.0586, 0.051, 0.0541, 0.0437, 0.041, 0.0469, 0.0527, 0.0491, 0.0514, 0.0436, 0.0423, 0.0426, 0.0505, 0.0521, 0.0313, 0.0442, 0.0445, 0.0437, 0.0503, 0.0445, 0.043, 0.039, 0.0462], "N-HiTS": [0.0284, 0.0297, 0.0293, 0.0299, 0.0302, 0.0315, 0.0307, 0.0338, 0.0342, 0.0359, 0.0388, 0.0382, 0.0361, 0.0384, 0.0415, 0.0407, 0.0415, 0.0429, 0.0459, 0.0456, 0.0477, 0.0498, 0.05, 0.0535, 0.0519, 0.0525, 0.0529, 0.055, 0.056, 0.0581, 0.055, 0.0585, 0.0615, 0.0592, 0.0633, 0.0626, 0.0654, 0.0668, 0.0676, 0.0679, 0.0648, 0.0688, 0.07, 0.0693, 0.0695, 0.0709, 0.0725, 0.0733, 0.0721, 0.0729, 0.0722, 0.0713, 0.0756, 0.0761, 0.074, 0.0718, 0.0778, 0.0748, 0.0751, 0.0745, 0.0719, 0.0734, 0.0711, 0.068, 0.0719, 0.0697, 0.0695, 0.0721, 0.0681, 0.0676, 0.067, 0.0669, 0.0664, 0.0643, 0.0627, 0.0584, 0.0593, 0.0561, 0.0602, 0.058, 0.0543, 0.0533, 0.0513, 0.0549, 0.0534, 0.0465, 0.0501, 0.0488, 0.0475, 0.0474, 0.0447, 0.0428, 0.0432, 0.0402, 0.0392, 0.0398], "Chronos-Bolt": [0.0276, 0.0289, 0.0304, 0.0318, 0.0328, 0.0335, 0.0342, 0.0346, 0.0348, 0.035, 0.0353, 0.0359, 0.0368, 0.0376, 0.0384, 0.0392, 0.0403, 0.0414, 0.0426, 0.0433, 0.0434, 0.0433, 0.0436, 0.0436, 0.0445, 0.046, 0.0472, 0.048, 0.0484, 0.0495, 0.0509, 0.0513, 0.051, 0.051, 0.0514, 0.0518, 0.0521, 0.0527, 0.0539, 0.0549, 0.0558, 0.0567, 0.0581, 0.0586, 0.0585, 0.0588, 0.0593, 0.0602, 0.0606, 0.0611, 0.0618, 0.0627, 0.0633, 0.064, 0.0647, 0.0643, 0.0637, 0.0636, 0.0637, 0.0638, 0.0642, 0.0646, 0.0656, 0.0662, 0.0654, 0.0661, 0.0668, 0.0671, 0.0673, 0.0675, 0.068, 0.0681, 0.0678, 0.0675, 0.0676, 0.0675, 0.0675, 0.0676, 0.0678, 0.0674, 0.0667, 0.0663, 0.0655, 0.0655, 0.0656, 0.065, 0.0639, 0.0623, 0.0619, 0.0619, 0.0617, 0.0615, 0.0609, 0.0604, 0.0596, 0.0592], "N-BEATS": [0.0313, 0.0304, 0.0332, 0.037, 0.0383, 0.0376, 0.0379, 0.0368, 0.0379, 0.0449, 0.039, 0.0462, 0.0514, 0.0468, 0.0459, 0.0547, 0.0431, 0.0513, 0.0478, 0.0533, 0.055, 0.0573, 0.0582, 0.0518, 0.0598, 0.0602, 0.0617, 0.057, 0.0629, 0.0503, 0.0643, 0.0656, 0.0598, 0.072, 0.0641, 0.0676, 0.0576, 0.0687, 0.0708, 0.0612, 0.0795, 0.0776, 0.0718, 0.0732, 0.0686, 0.076, 0.0761, 0.0746, 0.0777, 0.0663, 0.0753, 0.0742, 0.0758, 0.0685, 0.0719, 0.067, 0.0764, 0.0693, 0.0776, 0.08, 0.069, 0.0683, 0.0806, 0.072, 0.074, 0.0804, 0.0736, 0.0819, 0.0853, 0.074, 0.0752, 0.0829, 0.0735, 0.0783, 0.0749, 0.0801, 0.0791, 0.0768, 0.0807, 0.0692, 0.0712, 0.0641, 0.0666, 0.0704, 0.0754, 0.0662, 0.0594, 0.0656, 0.0643, 0.0771, 0.0737, 0.0703, 0.0684, 0.0667, 0.0604, 0.0592], "DLinear": [0.0144, 0.0327, 0.0252, 0.0234, 0.0135, 0.0154, 0.0154, 0.0226, 0.0231, 0.024, 0.0313, 0.0255, 0.0375, 0.0339, 0.0354, 0.0369, 0.0368, 0.0351, 0.0319, 0.0384, 0.042, 0.0312, 0.0343, 0.0362, 0.0312, 0.0345, 0.0372, 0.0339, 0.0352, 0.0435, 0.0348, 0.0394, 0.0487, 0.0435, 0.0496, 0.0521, 0.0512, 0.054, 0.0423, 0.0424, 0.0636, 0.0579, 0.0643, 0.0418, 0.0638, 0.0552, 0.058, 0.0684, 0.0479, 0.0505, 0.0777, 0.0542, 0.0671, 0.0744, 0.0592, 0.05, 0.0503, 0.0614, 0.0653, 0.0443, 0.0504, 0.0463, 0.0498, 0.0572, 0.0553, 0.0423, 0.0474, 0.0605, 0.0342, 0.048, 0.0543, 0.0589, 0.048, 0.0467, 0.0393, 0.0484, 0.0434, 0.0475, 0.0422, 0.0501, 0.031, 0.0411, 0.0401, 0.0278, 0.0302, 0.0259, 0.0284, 0.0253, 0.0311, 0.0266, 0.0187, 0.0333, 0.0346, 0.0406, 0.0274, 0.022], "iTransformer": [0.0206, 0.0315, 0.0205, 0.0248, 0.0441, 0.0328, 0.0271, 0.0293, 0.03, 0.028, 0.0277, 0.027, 0.0454, 0.0228, 0.0312, 0.0327, 0.0447, 0.0379, 0.0482, 0.0508, 0.0451, 0.0438, 0.0358, 0.05, 0.0439, 0.0468, 0.0412, 0.0546, 0.0387, 0.0604, 0.0553, 0.0568, 0.0614, 0.0448, 0.0592, 0.051, 0.06, 0.0578, 0.0642, 0.0647, 0.0483, 0.0501, 0.0446, 0.0581, 0.0582, 0.0626, 0.0562, 0.0396, 0.0714, 0.0666, 0.0612, 0.0753, 0.0618, 0.0684, 0.0585, 0.0561, 0.0475, 0.0629, 0.0572, 0.0571, 0.064, 0.0765, 0.0583, 0.0664, 0.0589, 0.0569, 0.0697, 0.0341, 0.0452, 0.076, 0.0611, 0.0548, 0.0586, 0.053, 0.0521, 0.0441, 0.0551, 0.0687, 0.0551, 0.0604, 0.0542, 0.0387, 0.0585, 0.0459, 0.0513, 0.0444, 0.048, 0.05, 0.0434, 0.0453, 0.0391, 0.0497, 0.0455, 0.0436, 0.0404, 0.0581], "SeasonalNaive": [0.0259, 0.0259, 0.0259, 0.0267, 0.028, 0.028, 0.029, 0.0303, 0.0303, 0.0311, 0.0311, 0.0311, 0.0322, 0.034, 0.0353, 0.0371, 0.0363, 0.0371, 0.0415, 0.0423, 0.0381, 0.0366, 0.0376, 0.0402, 0.041, 0.0389, 0.0387, 0.0397, 0.0434, 0.0454, 0.0514, 0.0499, 0.0478, 0.0478, 0.0509, 0.0551, 0.0577, 0.0605, 0.0598, 0.0618, 0.0618, 0.0618, 0.0665, 0.0678, 0.0681, 0.0704, 0.0702, 0.0717, 0.0736, 0.0775, 0.0772, 0.0751, 0.0775, 0.0871, 0.0887, 0.0861, 0.0887, 0.1009, 0.084, 0.0881, 0.0934, 0.0986, 0.1027, 0.098, 0.1001, 0.103, 0.1163, 0.1092, 0.11, 0.1145, 0.1132, 0.1139, 0.1113, 0.1103, 0.1134, 0.1197, 0.1134, 0.1014, 0.0975, 0.09, 0.0832, 0.0788, 0.0759, 0.0738, 0.0728, 0.0668, 0.0634, 0.0561, 0.0553, 0.0514, 0.0493, 0.0491, 0.0475, 0.041, 0.0327, 0.0368], "AutoARIMA": [0.0277, 0.0278, 0.0276, 0.0277, 0.0275, 0.0276, 0.0274, 0.0275, 0.0274, 0.0274, 0.0273, 0.0273, 0.0272, 0.0272, 0.0271, 0.0271, 0.027, 0.027, 0.0269, 0.0269, 0.0268, 0.0268, 0.0267, 0.0267, 0.0266, 0.0266, 0.0265, 0.0265, 0.0265, 0.0264, 0.0264, 0.0263, 0.0263, 0.0262, 0.0262, 0.0261, 0.0261, 0.026, 0.026, 0.026, 0.0259, 0.0259, 0.0258, 0.0258, 0.0257, 0.0257, 0.0256, 0.0256, 0.0255, 0.0255, 0.0254, 0.0254, 0.0253, 0.0253, 0.0252, 0.0252, 0.0252, 0.0251, 0.0251, 0.025, 0.025, 0.0249, 0.0249, 0.0248, 0.0248, 0.0247, 0.0247, 0.0246, 0.0246, 0.0245, 0.0245, 0.0245, 0.0244, 0.0244, 0.0243, 0.0243, 0.0242, 0.0242, 0.0241, 0.0241, 0.024, 0.024, 0.0239, 0.0239, 0.0238, 0.0238, 0.0238, 0.0237, 0.0237, 0.0236, 0.0236, 0.0235, 0.0235, 0.0234, 0.0234, 0.0233]}, "tests_h96": {"PatchTST vs N-HiTS": {"dm_stat": 2.042, "dm_p": 0.0436, "wilcoxon_p": 0.2135}, "PatchTST vs DLinear": {"dm_stat": -4.617, "dm_p": 0.0, "wilcoxon_p": 0.0}, "PatchTST vs Chronos-Bolt": {"dm_stat": 2.922, "dm_p": 0.0042, "wilcoxon_p": 0.0317}, "PatchTST vs N-BEATS": {"dm_stat": -0.166, "dm_p": 0.8684, "wilcoxon_p": 0.1341}, "N-HiTS vs Chronos-Bolt": {"dm_stat": 3.563, "dm_p": 0.0005, "wilcoxon_p": 0.6513}, "DLinear vs iTransformer": {"dm_stat": -0.051, "dm_p": 0.9594, "wilcoxon_p": 0.0004}}}, "Electricity": {"ds": ["2018-11-24 20:00:00", "2018-11-24 21:00:00", "2018-11-24 22:00:00", "2018-11-24 23:00:00", "2018-11-25 00:00:00", "2018-11-25 01:00:00", "2018-11-25 02:00:00", "2018-11-25 03:00:00", "2018-11-25 04:00:00", "2018-11-25 05:00:00", "2018-11-25 06:00:00", "2018-11-25 07:00:00", "2018-11-25 08:00:00", "2018-11-25 09:00:00", "2018-11-25 10:00:00", "2018-11-25 11:00:00", "2018-11-25 12:00:00", "2018-11-25 13:00:00", "2018-11-25 14:00:00", "2018-11-25 15:00:00", "2018-11-25 16:00:00", "2018-11-25 17:00:00", "2018-11-25 18:00:00", "2018-11-25 19:00:00", "2018-11-25 20:00:00", "2018-11-25 21:00:00", "2018-11-25 22:00:00", "2018-11-25 23:00:00", "2018-11-26 00:00:00", "2018-11-26 01:00:00", "2018-11-26 02:00:00", "2018-11-26 03:00:00", "2018-11-26 04:00:00", "2018-11-26 05:00:00", "2018-11-26 06:00:00", "2018-11-26 07:00:00", "2018-11-26 08:00:00", "2018-11-26 09:00:00", "2018-11-26 10:00:00", "2018-11-26 11:00:00", "2018-11-26 12:00:00", "2018-11-26 13:00:00", "2018-11-26 14:00:00", "2018-11-26 15:00:00", "2018-11-26 16:00:00", "2018-11-26 17:00:00", "2018-11-26 18:00:00", "2018-11-26 19:00:00", "2018-11-26 20:00:00", "2018-11-26 21:00:00", "2018-11-26 22:00:00", "2018-11-26 23:00:00", "2018-11-27 00:00:00", "2018-11-27 01:00:00", "2018-11-27 02:00:00", "2018-11-27 03:00:00", "2018-11-27 04:00:00", "2018-11-27 05:00:00", "2018-11-27 06:00:00", "2018-11-27 07:00:00", "2018-11-27 08:00:00", "2018-11-27 09:00:00", "2018-11-27 10:00:00", "2018-11-27 11:00:00", "2018-11-27 12:00:00", "2018-11-27 13:00:00", "2018-11-27 14:00:00", "2018-11-27 15:00:00", "2018-11-27 16:00:00", "2018-11-27 17:00:00", "2018-11-27 18:00:00", "2018-11-27 19:00:00", "2018-11-27 20:00:00", "2018-11-27 21:00:00", "2018-11-27 22:00:00", "2018-11-27 23:00:00", "2018-11-28 00:00:00", "2018-11-28 01:00:00", "2018-11-28 02:00:00", "2018-11-28 03:00:00", "2018-11-28 04:00:00", "2018-11-28 05:00:00", "2018-11-28 06:00:00", "2018-11-28 07:00:00", "2018-11-28 08:00:00", "2018-11-28 09:00:00", "2018-11-28 10:00:00", "2018-11-28 11:00:00", "2018-11-28 12:00:00", "2018-11-28 13:00:00", "2018-11-28 14:00:00", "2018-11-28 15:00:00", "2018-11-28 16:00:00", "2018-11-28 17:00:00", "2018-11-28 18:00:00", "2018-11-28 19:00:00"], "y_true": [0.1295, -0.0508, -0.6172, -0.7831, -0.9093, -1.1366, -1.2051, -1.2105, -1.326, -1.4721, -1.6308, -1.4522, -1.6362, -1.2484, -0.6424, -0.1626, -0.2654, 0.1368, 0.557, 0.3099, 0.2161, 0.4109, 0.5462, 0.9935, 0.6111, 0.18, -0.2961, -0.6622, -0.839, -1.0284, -1.1438, -1.0969, -1.2304, -1.2466, -1.4612, -1.4757, -1.528, -1.4306, -0.7903, -0.0725, -0.2041, 0.2847, 0.3893, 0.0736, 0.5714, 0.1818, 0.2107, 0.5949, 0.3261, 0.0736, -0.2582, -0.6406, -0.8318, -1.0735, -1.1853, -1.261, -1.1853, -1.3801, -1.5081, -1.4306, -1.5334, -1.0158, -0.527, -0.26, -0.2654, 0.0646, 0.1386, -0.0202, 0.2305, 0.3225, 0.9267, 0.6887, 0.3748, 0.061, -0.0815, -0.1987, -0.5053, -0.9634, -0.9436, -0.9779, -0.9833, -1.0536, -1.1835, -1.2953, -1.3765, -1.1041, -0.2961, 0.3568, 0.3586, 0.7103, 0.9376, 0.5588, 0.6905, 0.6003, 1.0819, 1.1324], "preds": {"PatchTST": [0.3132, 0.2, -0.1168, -0.6069, -0.7556, -0.9085, -1.1033, -1.142, -1.228, -1.2607, -1.419, -1.2198, -1.1876, -0.9723, -0.7255, -0.4556, -0.1385, 0.2566, 0.3597, 0.1263, 0.3353, 0.5358, 0.4543, 0.394, 0.3611, 0.1314, -0.2733, -0.5747, -0.7079, -0.692, -1.1495, -1.0974, -1.293, -1.4773, -1.5856, -1.3065, -1.3109, -1.0627, -0.7473, -0.4648, -0.2637, -0.1763, 0.2735, -0.0828, -0.0347, 0.1094, -0.0525, 0.2262, -0.2594, -0.2264, -0.582, -0.4129, -0.743, -1.0027, -1.2006, -1.1784, -1.4377, -1.5499, -1.3389, -1.3612, -1.3377, -1.0506, -0.7626, -0.5628, -0.265, 0.1, 0.1792, 0.2051, 0.2006, 0.3137, 0.4028, 0.2984, 0.2522, 0.0165, -0.358, -0.2959, -0.7831, -0.8452, -1.0, -0.8586, -1.1757, -1.3261, -1.3466, -1.1099, -1.4106, -1.0029, -0.6485, -0.1014, -0.043, 0.3009, 0.1285, 0.2204, 0.4998, 0.4565, 0.3712, 0.4734], "N-HiTS": [0.4108, 0.0987, 0.0315, -0.0099, -0.2308, -0.5762, -0.8771, -1.3088, -1.5389, -1.8772, -1.8046, -1.742, -1.5751, -1.2067, -0.8768, -0.4478, -0.0019, 0.3506, 0.6008, 0.7105, 0.6198, 0.7047, 0.728, 0.7337, 0.4118, 0.3182, 0.1502, -0.1431, -0.5263, -0.7943, -1.0001, -1.3346, -1.5177, -1.7597, -1.8044, -1.605, -1.2971, -0.9708, -0.5761, -0.3559, 0.0672, 0.5073, 0.6898, 0.778, 0.802, 0.9345, 0.7875, 0.7074, 0.5609, 0.3884, 0.0791, -0.1228, -0.3098, -0.6083, -0.873, -1.1516, -1.4343, -1.5935, -1.6987, -1.4615, -1.2593, -1.0447, -0.529, -0.11, 0.2901, 0.6062, 0.9188, 0.9938, 1.0798, 1.1667, 1.1545, 0.9411, 0.8349, 0.4876, 0.3301, 0.193, -0.0765, -0.3162, -0.5627, -1.0644, -1.2959, -1.5534, -1.363, -1.3579, -1.2029, -0.8677, -0.4206, -0.1222, 0.3085, 0.567, 0.8128, 0.8518, 0.9239, 0.8613, 0.8488, 0.7787], "Chronos-Bolt": [0.3002, -0.1701, -0.4853, -0.7474, -0.9554, -1.1227, -1.2277, -1.3128, -1.4162, -1.5269, -1.5798, -1.5607, -1.4873, -1.3198, -0.7387, -0.4356, -0.2392, -0.1108, -0.0531, -0.0518, -0.0009, 0.1582, 0.3402, 0.3853, 0.2847, -0.1609, -0.4658, -0.724, -0.9371, -1.0978, -1.2026, -1.2843, -1.3945, -1.503, -1.5498, -1.536, -1.466, -1.3175, -0.6932, -0.4145, -0.2552, -0.108, -0.0312, -0.0347, -0.0058, 0.1738, 0.3608, 0.3818, 0.2771, -0.1328, -0.4357, -0.7012, -0.908, -1.0625, -1.1687, -1.2511, -1.3572, -1.4792, -1.5417, -1.5444, -1.4734, -1.3128, -0.6883, -0.4524, -0.2796, -0.1386, -0.0544, -0.0345, 0.0348, 0.1644, 0.3524, 0.3951, 0.2526, -0.1663, -0.4286, -0.674, -0.876, -1.0176, -1.1136, -1.2175, -1.3232, -1.4312, -1.4821, -1.4715, -1.4098, -1.2524, -0.7484, -0.4653, -0.2693, -0.1288, -0.0392, -0.0427, -0.0117, 0.1433, 0.3385, 0.3737], "N-BEATS": [0.4318, 0.1572, 0.1546, -0.1939, -0.5228, -0.749, -1.1722, -0.8638, -1.4779, -1.5261, -1.8009, -1.486, -1.5353, -0.8629, -0.5752, -0.4128, -0.0045, 0.403, 0.7529, 0.3426, 0.7869, 1.0518, 0.7827, 0.8066, 0.5364, 0.2101, 0.3119, -0.0569, -0.1198, -0.6317, -0.9759, -1.1508, -1.5384, -1.5308, -1.5023, -1.719, -1.3889, -0.9188, -0.5929, -0.329, 0.2889, 0.6268, 0.673, 1.0231, 0.6132, 0.6553, 0.5413, 0.6644, 0.3686, 0.4587, 0.354, -0.329, -0.4045, -0.5844, -0.767, -1.2443, -1.4541, -1.7138, -1.604, -1.5585, -1.1604, -0.5456, -0.1963, -0.0568, 0.8761, 0.787, 1.3284, 1.0792, 1.012, 1.1241, 1.0092, 1.0147, 0.7037, 0.6786, 0.1236, 0.3512, -0.1068, 0.0777, -0.7636, -1.1089, -1.1333, -1.2417, -1.3838, -1.1039, -1.2923, -0.6734, -0.2572, -0.2675, 0.2238, 0.655, 0.8702, 1.1317, 0.8517, 0.8933, 1.2541, 0.7737], "DLinear": [-0.0099, -0.2333, -0.6431, -1.0901, -1.0797, -1.2728, -1.3426, -1.3366, -1.3944, -1.5553, -1.4879, -1.1511, -1.4343, -1.08, -0.8085, -0.3397, -0.2594, -0.0748, 0.0081, -0.0148, -0.0241, 0.0416, 0.2653, 0.1692, -0.0393, -0.4042, -0.5903, -0.7782, -0.9773, -1.2093, -1.501, -1.3113, -1.3638, -1.4777, -1.5814, -1.5191, -1.6344, -1.3278, -0.9439, -0.8754, -0.4071, -0.0947, -0.257, 0.0145, -0.1267, 0.078, -0.0169, 0.0368, 0.0325, -0.4305, -0.5912, -1.0461, -1.1881, -1.1387, -1.3927, -1.5075, -1.5371, -1.6701, -1.5438, -1.6505, -1.5119, -1.1853, -0.7874, -0.5013, 0.0237, -0.051, 0.0369, 0.1701, 0.2502, 0.3316, 0.2782, 0.3806, 0.2076, 0.0311, -0.2198, -0.5207, -0.9268, -0.9332, -1.098, -1.1759, -1.1578, -1.3539, -1.2136, -1.2416, -1.1658, -0.8147, -0.5729, -0.3975, 0.1301, 0.1765, 0.4907, 0.5391, 0.4502, 0.3119, 0.4884, 0.2794], "iTransformer": [-0.0725, -0.3664, -0.4936, -0.6512, -0.883, -1.1906, -1.2317, -1.3822, -1.6213, -1.6319, -1.4898, -1.5103, -1.3736, -1.1458, -0.9616, -0.5061, -0.4576, -0.0714, 0.0013, 0.2069, 0.1436, 0.0408, 0.0439, -0.0221, -0.109, -0.3362, -0.5527, -0.6536, -0.7747, -1.1715, -1.1963, -1.6591, -1.6427, -1.6185, -1.7835, -1.6081, -1.5745, -1.3091, -1.0388, -0.7331, -0.546, -0.3137, -0.1874, -0.125, 0.0209, -0.2076, -0.048, -0.1132, -0.3106, -0.3685, -0.6148, -0.7909, -1.1835, -1.1968, -1.3606, -1.5647, -1.6943, -1.7643, -1.6917, -1.5447, -1.414, -1.2091, -0.8146, -0.5876, -0.3032, -0.1003, 0.1474, 0.2381, 0.3, 0.2073, 0.1793, 0.1415, 0.1087, -0.0657, -0.2445, -0.4097, -0.6945, -0.927, -1.192, -1.4334, -1.3256, -1.5368, -1.4876, -1.4169, -1.1462, -0.9939, -0.6683, -0.5396, -0.0687, 0.0306, 0.279, 0.2764, 0.2483, 0.2736, 0.3399, 0.2539], "SeasonalNaive": [-1.0554, -1.1564, -1.2791, -1.418, -1.2971, -1.6831, -1.4414, -1.6957, -1.5532, -1.7083, -1.5965, -1.6416, -1.6272, -1.4125, -0.7723, -0.3881, -0.3087, -0.2384, -0.1807, -0.2348, -0.4296, 0.0556, 0.1674, 0.5678, -1.0554, -1.1564, -1.2791, -1.418, -1.2971, -1.6831, -1.4414, -1.6957, -1.5532, -1.7083, -1.5965, -1.6416, -1.6272, -1.4125, -0.7723, -0.3881, -0.3087, -0.2384, -0.1807, -0.2348, -0.4296, 0.0556, 0.1674, 0.5678, -1.0554, -1.1564, -1.2791, -1.418, -1.2971, -1.6831, -1.4414, -1.6957, -1.5532, -1.7083, -1.5965, -1.6416, -1.6272, -1.4125, -0.7723, -0.3881, -0.3087, -0.2384, -0.1807, -0.2348, -0.4296, 0.0556, 0.1674, 0.5678, -1.0554, -1.1564, -1.2791, -1.418, -1.2971, -1.6831, -1.4414, -1.6957, -1.5532, -1.7083, -1.5965, -1.6416, -1.6272, -1.4125, -0.7723, -0.3881, -0.3087, -0.2384, -0.1807, -0.2348, -0.4296, 0.0556, 0.1674, 0.5678], "AutoARIMA": [0.3161, 0.0675, -0.2888, -0.5749, -0.6223, -0.974, -0.8785, -1.1027, -1.038, -1.2945, -1.2602, -1.3219, -1.3172, -1.1635, -0.649, -0.2662, -0.1494, -0.0474, 0.09, -0.0507, 0.0303, 0.2071, 0.3462, 0.4374, 0.1909, -0.0527, -0.4043, -0.6858, -0.7288, -1.0762, -0.9767, -1.197, -1.1286, -1.3815, -1.3438, -1.4021, -1.3943, -1.2374, -0.72, -0.3344, -0.2149, -0.1103, 0.0296, -0.1087, -0.0254, 0.1536, 0.2949, 0.3881, 0.1435, -0.0982, -0.448, -0.7277, -0.7691, -1.1149, -1.0138, -1.2327, -1.1628, -1.4144, -1.3754, -1.4325, -1.4234, -1.2654, -0.7469, -0.3602, -0.2397, -0.1341, 0.0067, -0.1306, -0.0465, 0.1334, 0.2755, 0.3694, 0.1256, -0.1154, -0.4645, -0.7436, -0.7843, -1.1296, -1.0279, -1.2462, -1.1758, -1.4268, -1.3873, -1.4439, -1.4344, -1.276, -0.757, -0.37, -0.2491, -0.1431, -0.0019, -0.1389, -0.0545, 0.1257, 0.2681, 0.3624]}, "tests_h96": {"PatchTST vs N-HiTS": {"dm_stat": -0.183, "dm_p": 0.8559, "wilcoxon_p": 0.0554}, "PatchTST vs DLinear": {"dm_stat": -1.108, "dm_p": 0.2727, "wilcoxon_p": 0.0009}, "PatchTST vs Chronos-Bolt": {"dm_stat": 1.47, "dm_p": 0.1475, "wilcoxon_p": 0.0001}, "PatchTST vs N-BEATS": {"dm_stat": -1.142, "dm_p": 0.2585, "wilcoxon_p": 0.2915}, "N-HiTS vs Chronos-Bolt": {"dm_stat": 1.421, "dm_p": 0.1613, "wilcoxon_p": 0.0}, "DLinear vs iTransformer": {"dm_stat": -3.351, "dm_p": 0.0015, "wilcoxon_p": 0.0001}}}}};
+
+    const MODEL_COLORS = {
+      "PatchTST": "#ef4444",
+      "iTransformer": "#f97316",
+      "N-HiTS": "#10b981",
+      "N-BEATS": "#06b6d4",
+      "DLinear": "#eab308",
+      "Chronos-Bolt": "#8b5cf6",
+      "SeasonalNaive": "#94a3b8",
+      "AutoARIMA": "#64748b"
+    };
+
+    let currentStatsMetric = "MSE";
+    let activeForecastModels = new Set(["PatchTST", "N-HiTS", "DLinear", "Chronos-Bolt"]);
+
+    function getThemeColors() {
+      const style = getComputedStyle(document.documentElement);
+      const isLight = document.documentElement.classList.contains("light");
+      return {
+        fg: style.getPropertyValue("--foreground").trim() || (isLight ? "#0f172a" : "#f8fafc"),
+        muted: style.getPropertyValue("--muted-foreground").trim() || (isLight ? "#64748b" : "#94a3b8"),
+        border: style.getPropertyValue("--border").trim() || (isLight ? "#cbd5e1" : "#334155"),
+      };
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-panel").forEach(el => el.classList.add("hidden"));
+      document.getElementById("tab-" + tabId).classList.remove("hidden");
+
+      document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.className = "tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-[var(--secondary)] text-[var(--foreground)]";
+      });
+      const activeBtn = document.getElementById("tab-btn-" + tabId);
+      activeBtn.className = "tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-[var(--primary)] text-[var(--primary-foreground)]";
+
+      if (tabId === "pareto") renderPareto();
+      if (tabId === "stats") { renderCDDiagram(); renderStatsMatrix(); renderDMTable(); }
+      if (tabId === "forecasts") { renderForecastToggles(); renderForecastChart(); }
+      if (tabId === "table") renderFullTable();
+    }
+
+    // ---------------- TAB 2: PARETO FRONT ----------------
+    function renderPareto() {
+      const scope = document.getElementById("pareto-scope").value;
+      const metric = document.getElementById("pareto-metric").value;
+      const timeCol = document.getElementById("pareto-time").value;
+      const canvas = document.getElementById("pareto-canvas");
+      const ctx = canvas.getContext("2d");
+      const tc = getThemeColors();
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const models = ["PatchTST", "N-HiTS", "Chronos-Bolt", "N-BEATS", "DLinear", "iTransformer", "SeasonalNaive", "AutoARIMA"];
+      let points = [];
+
+      if (scope === "ALL_RANK" || scope === "ALL_NORM") {
+        const rankMap = metric === "MSE" ? DATA.friedman_mse.mean_ranks : DATA.friedman_mae.mean_ranks;
+        models.forEach(m => {
+          const rows = DATA.summary_rows.filter(r => r.Model === m);
+          const avgTime = rows.reduce((a, b) => a + b[timeCol], 0) / rows.length;
+          const avgErr = scope === "ALL_RANK"
+            ? rankMap[m]
+            : rows.reduce((a, b) => a + b[metric], 0) / rows.length;
+          points.push({ model: m, paradigm: rows[0].Paradigm, x: avgTime, y: avgErr });
+        });
+      } else {
+        const [ds, hStr] = scope.split("_");
+        const h = parseInt(hStr, 10);
+        const rows = DATA.summary_rows.filter(r => r.Dataset === ds && r.Horizon === h);
+        rows.forEach(r => {
+          points.push({ model: r.Model, paradigm: r.Paradigm, x: r[timeCol], y: r[metric] });
+        });
+      }
+
+      // Compute Pareto optimal points
+      const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+      const pareto = [];
+      let bestY = Infinity;
+      sorted.forEach(p => {
+        if (p.y < bestY) {
+          pareto.push(p);
+          bestY = p.y;
+        }
+      });
+      const paretoSet = new Set(pareto.map(p => p.model));
+
+      // Plot bounds (exclude extreme AutoARIMA outlier from Y scale if needed so chart stays readable)
+      const nonOutlierY = points.filter(p => p.model !== "AutoARIMA" || p.y < 1.5).map(p => p.y);
+      const minX = 0;
+      const maxX = Math.max(...points.map(p => p.x)) * 1.12 || 1;
+      const minY = Math.min(...points.map(p => p.y)) * 0.88;
+      const maxY = Math.max(...nonOutlierY) * 1.12;
+
+      const pad = { l: 75, r: 45, t: 35, b: 50 };
+      const pw = canvas.width - pad.l - pad.r;
+      const ph = canvas.height - pad.t - pad.b;
+
+      const toX = v => pad.l + ((v - minX) / (maxX - minX || 1)) * pw;
+      const toY = v => pad.t + ph - ((Math.min(v, maxY) - minY) / (maxY - minY || 1)) * ph;
+
+      // Grid lines
+      ctx.strokeStyle = tc.border;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      for (let i = 0; i <= 5; i++) {
+        const gy = pad.t + (ph * i) / 5;
+        ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + pw, gy); ctx.stroke();
+        const val = maxY - ((maxY - minY) * i) / 5;
+        ctx.fillStyle = tc.muted;
+        ctx.font = "12px sans-serif";
+        ctx.textAlign = "right";
+        ctx.fillText(val < 0.01 ? val.toFixed(5) : val.toFixed(3), pad.l - 8, gy + 4);
+      }
+      for (let i = 0; i <= 5; i++) {
+        const gx = pad.l + (pw * i) / 5;
+        ctx.beginPath(); ctx.moveTo(gx, pad.t); ctx.lineTo(gx, pad.t + ph); ctx.stroke();
+        const val = minX + ((maxX - minX) * i) / 5;
+        ctx.fillStyle = tc.muted;
+        ctx.font = "12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(val.toFixed(2) + "s", gx, pad.t + ph + 20);
+      }
+      ctx.setLineDash([]);
+
+      // Draw Pareto Frontier Line
+      if (pareto.length > 1) {
+        ctx.strokeStyle = "#0ea5e9";
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        pareto.forEach((p, idx) => {
+          const px = toX(p.x), py = toY(p.y);
+          if (idx === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Draw Points
+      points.forEach(p => {
+        const px = toX(p.x);
+        const py = toY(p.y);
+        const isPareto = paretoSet.has(p.model);
+        ctx.fillStyle = MODEL_COLORS[p.model] || "#3b82f6";
+        ctx.beginPath();
+        ctx.arc(px, py, isPareto ? 8 : 6, 0, Math.PI * 2);
+        ctx.fill();
+        if (isPareto) {
+          ctx.strokeStyle = "#0ea5e9";
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }
+        ctx.fillStyle = tc.fg;
+        ctx.font = (isPareto ? "bold " : "") + "12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(p.model + (isPareto ? " ★" : ""), px, py - 12);
+      });
+
+      // Axis titles
+      ctx.fillStyle = tc.fg;
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Czas obliczeń: " + timeCol + " (mniej = szybciej →)", pad.l + pw / 2, canvas.height - 10);
+
+      // Summary cards below chart
+      const cardsEl = document.getElementById("pareto-cards");
+      cardsEl.innerHTML = points.sort((a, b) => a.y - b.y).map(p => {
+        const isP = paretoSet.has(p.model);
+        return `
+          <div class="rounded-xl p-3 border ${isP ? 'border-sky-500/60 bg-sky-500/10' : 'border-[var(--border)] bg-[var(--secondary)]'}">
+            <div class="flex items-center justify-between text-xs mb-1">
+              <span class="font-bold" style="color:${MODEL_COLORS[p.model]}">${p.model}</span>
+              ${isP ? '<span class="text-xs font-semibold text-sky-400">★ Pareto</span>' : ''}
+            </div>
+            <div class="text-xs text-[var(--muted-foreground)]">${scope === 'ALL_RANK' ? 'Śr. Ranga' : metric}: <strong class="text-[var(--foreground)]">${p.y < 0.01 ? p.y.toFixed(5) : p.y.toFixed(3)}</strong></div>
+            <div class="text-xs text-[var(--muted-foreground)]">Czas: <strong class="text-[var(--foreground)]">${p.x.toFixed(2)}s</strong></div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // ---------------- TAB 3: STATISTICAL TESTS & CD DIAGRAM ----------------
+    function setStatsMetric(m) {
+      currentStatsMetric = m;
+      document.getElementById("stats-btn-mse").className = m === "MSE"
+        ? "px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)]"
+        : "px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[var(--secondary)] text-[var(--foreground)]";
+      document.getElementById("stats-btn-mae").className = m === "MAE"
+        ? "px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)]"
+        : "px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[var(--secondary)] text-[var(--foreground)]";
+      renderCDDiagram();
+      renderStatsMatrix();
+    }
+
+    function renderCDDiagram() {
+      const canvas = document.getElementById("cd-canvas");
+      const ctx = canvas.getContext("2d");
+      const tc = getThemeColors();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const fData = currentStatsMetric === "MSE" ? DATA.friedman_mse : DATA.friedman_mae;
+      const entries = Object.entries(fData.mean_ranks).sort((a, b) => a[1] - b[1]);
+
+      const padL = 120, padR = 120, axisY = 65;
+      const w = canvas.width - padL - padR;
+      const rankToX = r => padL + ((r - 1) / 7) * w;
+
+      // Axis line 1..8
+      ctx.strokeStyle = tc.fg;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(padL, axisY);
+      ctx.lineTo(padL + w, axisY);
+      ctx.stroke();
+
+      for (let r = 1; r <= 8; r++) {
+        const x = rankToX(r);
+        ctx.beginPath();
+        ctx.moveTo(x, axisY - 6);
+        ctx.lineTo(x, axisY + 6);
+        ctx.stroke();
+        ctx.fillStyle = tc.fg;
+        ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(String(r), x, axisY - 12);
+      }
+
+      // CD bar (q_alpha=3.031 for k=8 -> CD = 3.031 * sqrt(8*9/(6*16)) = 2.625)
+      const cdLen = (2.625 / 7) * w;
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(padL, 24);
+      ctx.lineTo(padL + cdLen, 24);
+      ctx.stroke();
+      ctx.fillStyle = "#ef4444";
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("Critical Difference (CD = 2.62, α = 0.05)", padL + cdLen + 10, 28);
+
+      // Equivalence bars: Top group (ranks ~2.9..4.3) and Statistical group (ranks ~6.5..6.8)
+      const topRankMin = entries[0][1];
+      const topRankMax = entries[5][1];
+      ctx.strokeStyle = "#10b981";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(rankToX(topRankMin), axisY + 22);
+      ctx.lineTo(rankToX(topRankMax), axisY + 22);
+      ctx.stroke();
+
+      const statRankMin = entries[6][1];
+      const statRankMax = entries[7][1];
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(rankToX(statRankMin), axisY + 34);
+      ctx.lineTo(rankToX(statRankMax), axisY + 34);
+      ctx.stroke();
+
+      // Leader lines & labels (left 4, right 4)
+      entries.forEach(([m, r], idx) => {
+        const x = rankToX(r);
+        const isLeft = idx < 4;
+        const rowY = axisY + 60 + (isLeft ? idx : (7 - idx)) * 32;
+        ctx.strokeStyle = MODEL_COLORS[m];
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(x, axisY);
+        ctx.lineTo(x, rowY);
+        ctx.lineTo(isLeft ? padL - 10 : padL + w + 10, rowY);
+        ctx.stroke();
+
+        ctx.fillStyle = MODEL_COLORS[m];
+        ctx.beginPath();
+        ctx.arc(x, axisY, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = tc.fg;
+        ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = isLeft ? "right" : "left";
+        ctx.fillText(`${m} (${r.toFixed(2)})`, isLeft ? padL - 16 : padL + w + 16, rowY + 4);
+      });
+    }
+
+    function renderStatsMatrix() {
+      const mode = document.getElementById("matrix-mode").value;
+      const models = ["PatchTST", "N-HiTS", "Chronos-Bolt", "N-BEATS", "DLinear", "iTransformer", "SeasonalNaive", "AutoARIMA"];
+      const fData = currentStatsMetric === "MSE" ? DATA.friedman_mse : DATA.friedman_mae;
+
+      let html = `<table class="w-full text-xs border-collapse"><thead><tr class="border-b border-[var(--border)]"><th class="p-1.5 text-left">Model</th>`;
+      models.forEach(m => { html += `<th class="p-1.5 text-right">${m.slice(0, 8)}</th>`; });
+      html += `</tr></thead><tbody class="divide-y divide-[var(--border)]">`;
+
+      models.forEach(m1 => {
+        html += `<tr><td class="p-1.5 font-semibold">${m1}</td>`;
+        models.forEach(m2 => {
+          if (m1 === m2) {
+            html += `<td class="p-1.5 text-right text-[var(--muted-foreground)]">—</td>`;
+          } else if (mode === "winrate") {
+            const wr = (DATA.winrate_mse[m1][m2] * 100).toFixed(1) + "%";
+            const cls = DATA.winrate_mse[m1][m2] > 0.52 ? "text-emerald-400 font-semibold" : "";
+            html += `<td class="p-1.5 text-right ${cls}">${wr}</td>`;
+          } else {
+            const p = mode === "nemenyi" ? fData.nemenyi[m1][m2] : DATA.wilcoxon_mse_p[m1][m2];
+            const sig = p < 0.05;
+            const cls = sig ? "bg-emerald-500/15 text-emerald-400 font-bold" : "text-[var(--muted-foreground)]";
+            html += `<td class="p-1.5 text-right ${cls}">${p < 0.0001 ? "<0.0001" : p.toFixed(3)}</td>`;
+          }
+        });
+        html += `</tr>`;
+      });
+      html += `</tbody></table>`;
+      document.getElementById("pairwise-matrix-container").innerHTML = html;
+    }
+
+    function renderDMTable() {
+      const ds = document.getElementById("dm-dataset").value;
+      const pairs = DATA.forecast_samples[ds].tests_h96;
+      let html = `<table class="w-full text-xs border-collapse"><thead><tr class="border-b border-[var(--border)] text-[var(--muted-foreground)]">
+        <th class="py-2 text-left">Porównywana Para Modeli</th>
+        <th class="py-2 text-right">Statystyka DM</th>
+        <th class="py-2 text-right">DM p-value</th>
+        <th class="py-2 text-right">Wilcoxon p-val</th>
+      </tr></thead><tbody class="divide-y divide-[var(--border)]">`;
+      Object.entries(pairs).forEach(([pair, res]) => {
+        const dmSig = res.dm_p < 0.05;
+        const wSig = res.wilcoxon_p < 0.05;
+        html += `<tr>
+          <td class="py-2 font-semibold">${pair}</td>
+          <td class="py-2 text-right">${res.dm_stat.toFixed(3)}</td>
+          <td class="py-2 text-right ${dmSig ? 'text-emerald-400 font-bold' : ''}">${res.dm_p.toFixed(4)}</td>
+          <td class="py-2 text-right ${wSig ? 'text-emerald-400 font-bold' : ''}">${res.wilcoxon_p.toFixed(4)}</td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+      document.getElementById("dm-table-container").innerHTML = html;
+    }
+
+    // ---------------- TAB 4: FORECAST VISUALIZER ----------------
+    function renderForecastToggles() {
+      const models = ["PatchTST", "iTransformer", "N-HiTS", "N-BEATS", "DLinear", "Chronos-Bolt", "SeasonalNaive", "AutoARIMA"];
+      const container = document.getElementById("fc-model-toggles");
+      container.innerHTML = models.map(m => {
+        const on = activeForecastModels.has(m);
+        return `<button onclick="toggleFcModel('${m}')" class="px-3 py-1 rounded-full text-xs font-semibold border transition-all"
+          style="border-color:${MODEL_COLORS[m]}; background:${on ? MODEL_COLORS[m] + '25' : 'transparent'}; color:${on ? MODEL_COLORS[m] : 'var(--muted-foreground)'}">
+          ${on ? '✓ ' : ''}${m}
+        </button>`;
+      }).join("");
+    }
+
+    function toggleFcModel(m) {
+      if (activeForecastModels.has(m)) activeForecastModels.delete(m);
+      else activeForecastModels.add(m);
+      renderForecastToggles();
+      renderForecastChart();
+    }
+
+    function renderForecastChart() {
+      const ds = document.getElementById("fc-dataset").value;
+      const sample = DATA.forecast_samples[ds];
+      const canvas = document.getElementById("fc-canvas");
+      const ctx = canvas.getContext("2d");
+      const tc = getThemeColors();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const yTrue = sample.y_true;
+      let allVals = [...yTrue];
+      activeForecastModels.forEach(m => {
+        if (sample.preds[m]) allVals.push(...sample.preds[m]);
+      });
+
+      const minY = Math.min(...allVals) - 0.1;
+      const maxY = Math.max(...allVals) + 0.1;
+      const pad = { l: 60, r: 30, t: 25, b: 40 };
+      const pw = canvas.width - pad.l - pad.r;
+      const ph = canvas.height - pad.t - pad.b;
+
+      const toX = i => pad.l + (i / (yTrue.length - 1)) * pw;
+      const toY = v => pad.t + ph - ((v - minY) / (maxY - minY || 1)) * ph;
+
+      // Grid
+      ctx.strokeStyle = tc.border;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      for (let i = 0; i <= 4; i++) {
+        const gy = pad.t + (ph * i) / 4;
+        ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + pw, gy); ctx.stroke();
+        const val = maxY - ((maxY - minY) * i) / 4;
+        ctx.fillStyle = tc.muted;
+        ctx.font = "12px sans-serif";
+        ctx.textAlign = "right";
+        ctx.fillText(val.toFixed(2), pad.l - 8, gy + 4);
+      }
+      ctx.setLineDash([]);
+
+      // Ground truth
+      ctx.strokeStyle = tc.fg;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      yTrue.forEach((v, i) => { if (i === 0) ctx.moveTo(toX(i), toY(v)); else ctx.lineTo(toX(i), toY(v)); });
+      ctx.stroke();
+
+      // Active models
+      activeForecastModels.forEach(m => {
+        const series = sample.preds[m];
+        if (!series) return;
+        ctx.strokeStyle = MODEL_COLORS[m];
+        ctx.lineWidth = 1.9;
+        ctx.beginPath();
+        series.forEach((v, i) => { if (i === 0) ctx.moveTo(toX(i), toY(v)); else ctx.lineTo(toX(i), toY(v)); });
+        ctx.stroke();
+      });
+
+      ctx.fillStyle = tc.fg;
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`Krok horyzontu prognozy t = 1..96 (${ds}, linia pogrubiona = Ground Truth)`, pad.l + pw / 2, canvas.height - 10);
+
+      renderHorizonDegradation(ds);
+    }
+
+    function renderHorizonDegradation(ds) {
+      const canvas = document.getElementById("horizon-canvas");
+      const ctx = canvas.getContext("2d");
+      const tc = getThemeColors();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const horizons = [96, 192, 336, 720];
+      const rows = DATA.summary_rows.filter(r => r.Dataset === ds && activeForecastModels.has(r.Model));
+      if (!rows.length) return;
+
+      const minY = Math.min(...rows.map(r => r.MSE)) * 0.9;
+      const maxY = Math.max(...rows.map(r => r.MSE)) * 1.08;
+      const pad = { l: 65, r: 30, t: 20, b: 40 };
+      const pw = canvas.width - pad.l - pad.r;
+      const ph = canvas.height - pad.t - pad.b;
+
+      const toX = idx => pad.l + (idx / 3) * pw;
+      const toY = v => pad.t + ph - ((v - minY) / (maxY - minY || 1)) * ph;
+
+      ctx.strokeStyle = tc.border;
+      ctx.setLineDash([3, 3]);
+      for (let i = 0; i <= 4; i++) {
+        const gy = pad.t + (ph * i) / 4;
+        ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + pw, gy); ctx.stroke();
+        const val = maxY - ((maxY - minY) * i) / 4;
+        ctx.fillStyle = tc.muted;
+        ctx.font = "12px sans-serif";
+        ctx.textAlign = "right";
+        ctx.fillText(val < 0.01 ? val.toFixed(5) : val.toFixed(3), pad.l - 8, gy + 4);
+      }
+      ctx.setLineDash([]);
+
+      horizons.forEach((h, idx) => {
+        ctx.fillStyle = tc.fg;
+        ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("H = " + h, toX(idx), pad.t + ph + 22);
+      });
+
+      activeForecastModels.forEach(m => {
+        const mrows = horizons.map(h => rows.find(r => r.Model === m && r.Horizon === h)).filter(Boolean);
+        if (!mrows.length) return;
+        ctx.strokeStyle = MODEL_COLORS[m];
+        ctx.fillStyle = MODEL_COLORS[m];
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        mrows.forEach((r, idx) => {
+          const px = toX(idx), py = toY(r.MSE);
+          if (idx === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+        mrows.forEach((r, idx) => {
+          ctx.beginPath();
+          ctx.arc(toX(idx), toY(r.MSE), 4.5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      });
+    }
+
+    // ---------------- TAB 5: FULL BENCHMARK TABLE ----------------
+    function renderFullTable() {
+      const ds = document.getElementById("tbl-dataset").value;
+      const h = document.getElementById("tbl-horizon").value;
+      const par = document.getElementById("tbl-paradigm").value;
+
+      // Find best MSE per (Dataset, Horizon)
+      const bestByTask = {};
+      DATA.summary_rows.forEach(r => {
+        const k = r.Dataset + "_" + r.Horizon;
+        if (!(k in bestByTask) || r.MSE < bestByTask[k]) bestByTask[k] = r.MSE;
+      });
+
+      const filtered = DATA.summary_rows.filter(r => {
+        if (ds !== "ALL" && r.Dataset !== ds) return false;
+        if (h !== "ALL" && String(r.Horizon) !== h) return false;
+        if (par !== "ALL" && r.Paradigm !== par) return false;
+        return true;
+      });
+
+      const fmt = v => v < 0.01 ? v.toFixed(5) : v.toFixed(4);
+      document.getElementById("full-table-body").innerHTML = filtered.map(r => {
+        const isBest = Math.abs(r.MSE - bestByTask[r.Dataset + "_" + r.Horizon]) < 1e-9;
+        return `<tr class="${isBest ? 'bg-emerald-500/10 font-semibold' : ''}">
+          <td class="py-2 px-3">${r.Dataset}</td>
+          <td class="py-2 px-3">${r.Horizon}</td>
+          <td class="py-2 px-3">${r.Num_Windows}</td>
+          <td class="py-2 px-3 font-semibold" style="color:${MODEL_COLORS[r.Model]}">${isBest ? '⭐ ' : ''}${r.Model}</td>
+          <td class="py-2 px-3 text-[var(--muted-foreground)]">${r.Paradigm}</td>
+          <td class="py-2 px-3 text-right">${fmt(r.MSE)} <span class="text-[var(--muted-foreground)]">±${fmt(r.MSE_Std)}</span></td>
+          <td class="py-2 px-3 text-right">${fmt(r.MAE)}</td>
+          <td class="py-2 px-3 text-right">${fmt(r.RMSE)}</td>
+          <td class="py-2 px-3 text-right">${r.Fit_Time_s.toFixed(2)}</td>
+          <td class="py-2 px-3 text-right">${r.Infer_Time_s.toFixed(2)}</td>
+          <td class="py-2 px-3 text-right font-semibold">${r["Time (s)"].toFixed(2)}</td>
+        </tr>`;
+      }).join("");
+    }
+  </script>
+</body>
+</html>
