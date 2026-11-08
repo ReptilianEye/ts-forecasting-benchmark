@@ -52,5 +52,6 @@ lightning_logs/
 results/**/*.pth
 results/**/*.ckpt
 results/metrics/residuals/*.csv
+results/logs/*.log
 !results/**/.gitkeep
 

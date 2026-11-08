@@ -135,9 +135,9 @@ flowchart TD
 1. [x] **Zadanie 1**: Dodać pakiety `optuna`, `chronos-forecasting`, `scikit-posthocs` do `pyproject.toml`.
 2. [x] **Zadanie 2**: Przygotować `load_long_benchmark` w `src/ts_forecasting_benchmark/data/dataset.py`.
 3. [x] **Zadanie 3**: Uruchomić `scripts/run_pilot_benchmark.py` (SeasonalNaive, AutoARIMA, NHITS, Chronos-Bolt).
-4. [ ] **Zadanie 4** ([Issue #1](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/1)): Dodać pozostałe modele do porównania: `DLinear`, `N-BEATS` oraz `PatchTST` w skrypcie benchmarkowym.
-5. [ ] **Zadanie 5** ([Issue #2](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/2)): Zaimplementować moduł testów statystycznych (`src/ts_forecasting_benchmark/evaluation/statistical_tests.py` - Diebold-Mariano i Wilcoxon).
-6. [ ] **Zadanie 6** ([Issue #3](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/3)): Przygotować skrypt strojenia Optuna dla modeli głębokich (`scripts/tune_optuna.py`).
-7. [ ] **Zadanie 7** ([Issue #4](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/4)): Pełny benchmark LTSF (wielokrotne okna i horyzonty na ETTh1, Weather, Electricity).
-8. [ ] **Zadanie 8** ([Issue #5](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/5)): Raport podsumowujący, wykres frontu Pareto oraz Critical Difference diagram.
+4. [x] **Zadanie 4** ([Issue #1](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/1)): Dodać pozostałe modele do porównania: `DLinear`, `N-BEATS` oraz `PatchTST` w skrypcie benchmarkowym.
+5. [x] **Zadanie 5** ([Issue #2](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/2)): Zaimplementować moduł testów statystycznych (`src/ts_forecasting_benchmark/evaluation/statistical_tests.py` - Diebold-Mariano i Wilcoxon).
+6. [x] **Zadanie 6** ([Issue #3](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/3)): Przygotować skrypt strojenia Optuna dla modeli głębokich (`scripts/tune_optuna.py`).
+7. [x] **Zadanie 7** ([Issue #4](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/4)): Pełny benchmark LTSF (wielokrotne okna i horyzonty na ETTh1, Weather, Electricity).
+8. [x] **Zadanie 8** ([Issue #5](https://github.com/ReptilianEye/ts-forecasting-benchmark/issues/5)): Raport podsumowujący, wykres frontu Pareto oraz Critical Difference diagram.
 
