@@ -1,9 +1,12 @@
 """Data loading and preprocessing utilities for benchmark time series."""
 
 from ts_forecasting_benchmark.data.dataset import (
+    SEASON_LENGTHS,
     SPLIT_CONFIGS,
     LongBenchmarkData,
+    RollingWindow,
     TimeSeriesBenchmarkDataset,
+    generate_rolling_windows,
     load_benchmark_dataframe,
     load_long_benchmark,
     to_neuralforecast_df,
@@ -29,8 +32,11 @@ __all__ = [
     "load_benchmark_dataframe",
     "load_long_benchmark",
     "LongBenchmarkData",
+    "RollingWindow",
+    "generate_rolling_windows",
     "TimeSeriesBenchmarkDataset",
     "SPLIT_CONFIGS",
+    "SEASON_LENGTHS",
     "to_neuralforecast_df",
 ]
 
